@@ -1,0 +1,50 @@
+# urlscan-lookup configuration (optional).
+# Copy to ~/.config/urlscan-lookup/config.toml to override defaults.
+#
+# A urlscan.io free-plan API key is REQUIRED. Prefer supplying it via the
+# URLSCAN_API_KEY environment variable rather than this file — a key in a
+# plaintext config is a secret at rest. The [auth] api_key below is accepted
+# for local convenience only.
+
+[auth]
+# urlscan.io API key. DISCOURAGED here — use the URLSCAN_API_KEY environment
+# variable instead. If you do set it, keep this file out of version control
+# (it is git-ignored by default).
+# api_key = "REPLACE_WITH_YOUR_URLSCAN_API_KEY"
+
+[scan]
+# Default visibility for `scan` / `scan_url`. private (default) keeps the scan
+# visible only to your account; public publishes it to the world (including the
+# attacker) and must be chosen deliberately.
+# default_visibility = "private"       # private | unlisted | public
+
+# Whether the CLI `scan` command polls to completion after submitting.
+# wait = true
+
+# Poll timing (urlscan guidance: wait 10s after submit, then poll every 2s).
+# poll_initial_delay_seconds = 10
+# poll_interval_seconds = 2
+# poll_timeout_seconds = 120
+
+# Default scanning PoP country (e.g. "jp", "de"). Empty lets urlscan choose.
+# The URLSCAN_LOOKUP_COUNTRY environment variable overrides this value.
+# country = ""
+
+[search]
+# Default number of search results.
+# size = 100
+
+[cache]
+# How long a result/search response stays fresh, in hours. urlscan results are
+# immutable once complete, so this can be high. Active scans are never cached.
+# The URLSCAN_LOOKUP_CACHE_TTL_HOURS environment variable overrides this value.
+# ttl_hours = 24
+
+# Where cached responses are stored (optional). Default: ~/.cache/urlscan-lookup
+# The URLSCAN_LOOKUP_CACHE_DIR environment variable overrides this value.
+# dir = "~/.cache/urlscan-lookup"
+
+[network]
+# Network timeout in seconds for each HTTP exchange.
+# The URLSCAN_LOOKUP_TIMEOUT_SECONDS environment variable overrides this value.
+# timeout_seconds = 30
