@@ -205,7 +205,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		rl := parseRateLimit(resp.Header)
 		lastRL = rl
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		switch {
 		case resp.StatusCode == http.StatusOK:

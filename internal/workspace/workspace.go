@@ -42,7 +42,7 @@ func (w *Workspace) WriteFileAtomic(rel string, data []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("workspace: open root: %w", err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 
 	tmp := clean + ".tmp"
 	f, err := root.Create(tmp)
@@ -50,7 +50,7 @@ func (w *Workspace) WriteFileAtomic(rel string, data []byte) (string, error) {
 		return "", fmt.Errorf("workspace: create: %w", err)
 	}
 	if _, err := f.Write(data); err != nil {
-		f.Close()
+		_ = f.Close()
 		_ = root.Remove(tmp)
 		return "", fmt.Errorf("workspace: write: %w", err)
 	}
