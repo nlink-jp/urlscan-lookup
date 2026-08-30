@@ -15,6 +15,14 @@ All notable changes to urlscan-lookup are documented here.
 - `get_screenshot` takes `inline` (default true) for a client that cannot accept
   image content.
 
+### Changed
+
+- The `workspace_root` argument now says plainly that the caller should pass a
+  root it can read back: every result is returned as a path under that root, so
+  a workspace the caller cannot open leaves it holding a path to nothing. Text
+  only — the behaviour is unchanged.
+
+
 ## [0.1.0] - 2026-07-17
 
 Initial release.

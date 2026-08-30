@@ -87,7 +87,7 @@ func toolsList() any {
 					"required": []string{"uuid"},
 					"properties": map[string]any{
 						"uuid":           map[string]any{"type": "string", "description": "The scan uuid."},
-						"workspace_root": map[string]any{"type": "string", "description": "Directory to write the PNG into (an agent-prepared writable dir). Defaults to the server workspace."},
+						"workspace_root": map[string]any{"type": "string", "description": "Directory to write the PNG into — pass one you can read back, since the reply carries the path. Defaults to the server workspace, which is only useful if that is readable to you."},
 						"inline":         map[string]any{"type": "boolean", "description": "Return the image inline when it fits the budget (default true). Set false if your client cannot take image content."},
 					},
 				},
