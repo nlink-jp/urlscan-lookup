@@ -2,7 +2,7 @@
 
 All notable changes to urlscan-lookup are documented here.
 
-## [Unreleased]
+## [0.2.0] - 2026-08-31
 
 ### Added
 
