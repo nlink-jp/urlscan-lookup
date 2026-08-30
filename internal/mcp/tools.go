@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -80,13 +81,14 @@ func toolsList() any {
 			},
 			{
 				"name":        "get_screenshot",
-				"description": "Save a scan's screenshot PNG to a workspace directory and return the file path (never returns image bytes).",
+				"description": "Fetch a scan's screenshot PNG. Small screenshots come back inline as MCP image content so you can look at them directly; larger ones are written to the workspace and only the path is returned. Both shapes always carry the path and byte count as text.",
 				"inputSchema": map[string]any{
 					"type":     "object",
 					"required": []string{"uuid"},
 					"properties": map[string]any{
 						"uuid":           map[string]any{"type": "string", "description": "The scan uuid."},
 						"workspace_root": map[string]any{"type": "string", "description": "Directory to write the PNG into (an agent-prepared writable dir). Defaults to the server workspace."},
+						"inline":         map[string]any{"type": "boolean", "description": "Return the image inline when it fits the budget (default true). Set false if your client cannot take image content."},
 					},
 				},
 			},
@@ -202,10 +204,17 @@ func (s *server) toolSearch(ctx context.Context, args json.RawMessage) toolResul
 	return jsonResult(res)
 }
 
+// inlineImageBudget caps the PNG returned inline as MCP image content. Base64
+// inflates by a third, and an inline image is replayed with the conversation
+// every round, so a large screenshot stays file-only (chrome-pilot-mcp uses the
+// same 4 MiB ceiling).
+const inlineImageBudget = 4 << 20
+
 func (s *server) toolGetScreenshot(ctx context.Context, args json.RawMessage) toolResult {
 	var a struct {
 		UUID          string `json:"uuid"`
 		WorkspaceRoot string `json:"workspace_root"`
+		Inline        *bool  `json:"inline"`
 	}
 	_ = json.Unmarshal(args, &a)
 	if a.UUID == "" {
@@ -234,7 +243,19 @@ func (s *server) toolGetScreenshot(ctx context.Context, args json.RawMessage) to
 	if err != nil {
 		return errorResult("workspace_error", err.Error())
 	}
-	return jsonResult(map[string]any{"uuid": clean, "screenshot_file": path, "bytes": len(png)})
+	res := jsonResult(map[string]any{"uuid": clean, "screenshot_file": path, "bytes": len(png)})
+	// A screenshot is the one result here a model has to *see*, and MCP carries
+	// image content natively — a path alone is useless to a client that cannot
+	// read the server's disk. The file stays either way: it is what an oversized
+	// screenshot, and any later reference to the same scan, is served from.
+	if (a.Inline == nil || *a.Inline) && len(png) <= inlineImageBudget {
+		res.Content = append(res.Content, contentItem{
+			Type:     "image",
+			Data:     base64.StdEncoding.EncodeToString(png),
+			MimeType: "image/png",
+		})
+	}
+	return res
 }
 
 func (s *server) toolGetQuota(ctx context.Context) toolResult {

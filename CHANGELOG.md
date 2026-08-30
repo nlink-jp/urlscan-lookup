@@ -2,6 +2,19 @@
 
 All notable changes to urlscan-lookup are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **`get_screenshot` returns the PNG inline as MCP image content** when it is at
+  or below 4 MiB, so a model can look at the screenshot directly instead of only
+  receiving a path it may have no way to read. The file is still written to the
+  workspace and the path and byte count are still returned as text; above the
+  budget the result stays file-only, because base64 inflates by a third and an
+  inline image is replayed with the conversation every round.
+- `get_screenshot` takes `inline` (default true) for a client that cannot accept
+  image content.
+
 ## [0.1.0] - 2026-07-17
 
 Initial release.

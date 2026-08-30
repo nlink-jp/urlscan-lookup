@@ -69,8 +69,10 @@ verdict is malicious (for SOC scripting).
 
 `scan_url`, `get_result`, `search`, `get_screenshot`, `get_quota`,
 `get_usage`. Scans are asynchronous: `scan_url` returns a UUID immediately and
-`get_result` polls (a `processing` status is normal). Call `get_usage` for the
-full reference.
+`get_result` polls (a `processing` status is normal). `get_screenshot` returns
+the PNG as MCP image content when it fits (4 MiB), so a model can look at it
+directly, and always writes it to the workspace as well. Call `get_usage` for
+the full reference.
 
 ## Build & test
 

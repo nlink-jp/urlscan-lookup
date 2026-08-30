@@ -55,9 +55,17 @@ screenshot_url}]}`.
 
 ### get_screenshot
 
-Save a scan's screenshot PNG into `workspace_root` (an agent-prepared writable
-directory) and return the file path — never image bytes. Argument: `uuid`
-(required), `workspace_root` (optional; defaults to the server workspace).
+Fetch a scan's screenshot PNG. It is always written into `workspace_root` (an
+agent-prepared writable directory) and the path plus byte count are returned as
+text. A screenshot at or below 4 MiB **also rides inline as MCP image content**,
+so you can look at it directly rather than needing to read the server's disk.
+
+Arguments: `uuid` (required), `workspace_root` (optional; defaults to the server
+workspace), `inline` (optional, default true — set false if your client cannot
+take image content).
+
+Above 4 MiB the result is file-only: base64 inflates by a third, and an inline
+image is replayed with the conversation every round.
 
 ### get_quota
 

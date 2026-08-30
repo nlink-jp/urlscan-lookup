@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 
 // fakeClient is a scripted engine.Client for driving the server.
 type fakeClient struct {
+	png       []byte // Screenshot payload; nil uses a tiny stub
 	submit    *urlscan.SubmitResponse
 	resultErr error
 	result    *urlscan.Result
@@ -33,7 +36,12 @@ func (f *fakeClient) Search(context.Context, string, int, string) (*urlscan.Sear
 func (f *fakeClient) Quota(context.Context) (*urlscan.Quota, *urlscan.RateLimit, error) {
 	return f.quota, nil, nil
 }
-func (f *fakeClient) Screenshot(context.Context, string) ([]byte, error) { return []byte("png"), nil }
+func (f *fakeClient) Screenshot(context.Context, string) ([]byte, error) {
+	if f.png != nil {
+		return f.png, nil
+	}
+	return []byte("png"), nil
+}
 
 func testServer(t *testing.T, fc *fakeClient) (*engine.Engine, *config.Config) {
 	t.Helper()
@@ -152,5 +160,66 @@ func TestGetUsageNonEmpty(t *testing.T) {
 	b, _ := json.Marshal(resps[0].Result)
 	if !strings.Contains(string(b), "operating manual") {
 		t.Fatalf("get_usage should return the manual: %s", b)
+	}
+}
+
+// toolContent returns the raw content blocks of a tool result.
+func toolContent(t *testing.T, r response) []contentItem {
+	t.Helper()
+	b, _ := json.Marshal(r.Result)
+	var tr toolResult
+	if err := json.Unmarshal(b, &tr); err != nil {
+		t.Fatalf("not a tool result: %s", b)
+	}
+	return tr.Content
+}
+
+func screenshotCall(t *testing.T, fc *fakeClient, extra string) []contentItem {
+	t.Helper()
+	ws := t.TempDir()
+	req := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_screenshot","arguments":{"uuid":"c1b2a3d4-1111-2222-3333-444455556666","workspace_root":%q%s}}}`, ws, extra)
+	return toolContent(t, drive(t, fc, req)[0])
+}
+
+// A screenshot is the one result a model has to *see*. MCP carries image
+// content natively, so a small one rides inline alongside the path.
+func TestGetScreenshotReturnsImageInline(t *testing.T) {
+	content := screenshotCall(t, &fakeClient{}, "")
+	if len(content) != 2 {
+		t.Fatalf("want a text block and an image block, got %d: %+v", len(content), content)
+	}
+	if content[0].Type != "text" || !strings.Contains(content[0].Text, "screenshot_file") {
+		t.Errorf("first block must stay the text metadata: %+v", content[0])
+	}
+	img := content[1]
+	if img.Type != "image" || img.MimeType != "image/png" {
+		t.Fatalf("second block is not PNG image content: %+v", img)
+	}
+	raw, err := base64.StdEncoding.DecodeString(img.Data)
+	if err != nil || string(raw) != "png" {
+		t.Errorf("image data does not decode to the PNG bytes: %v %q", err, raw)
+	}
+	if img.Text != "" {
+		t.Error("an image block must not carry an empty text key — it reads as an empty answer")
+	}
+}
+
+// Base64 inflates by a third and an inline image is replayed every round, so a
+// large screenshot stays file-only.
+func TestGetScreenshotOversizedStaysFileOnly(t *testing.T) {
+	content := screenshotCall(t, &fakeClient{png: make([]byte, inlineImageBudget+1)}, "")
+	if len(content) != 1 || content[0].Type != "text" {
+		t.Fatalf("an oversized screenshot must not be inlined: %+v", content)
+	}
+	if !strings.Contains(content[0].Text, "screenshot_file") {
+		t.Errorf("the path must still be returned: %s", content[0].Text)
+	}
+}
+
+// A client that cannot take image content can say so.
+func TestGetScreenshotInlineCanBeDeclined(t *testing.T) {
+	content := screenshotCall(t, &fakeClient{}, `,"inline":false`)
+	if len(content) != 1 || content[0].Type != "text" {
+		t.Fatalf("inline:false must return text only: %+v", content)
 	}
 }

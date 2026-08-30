@@ -62,9 +62,16 @@ internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
   live from `/user/quotas/` and `X-Rate-Limit-*`, never hardcoded.
 - **result/search cached; scan not.** A new scan always generates a new
   result, so it is never served from cache.
-- **Screenshots are file-mediated** in MCP (asn-lookup / abuse-lookup pattern):
+- **Screenshots ride inline when they fit, and are always written to disk.**
   `get_screenshot` writes the PNG to an agent-provided `workspace_root` (via
-  `os.Root`) and returns the path — never image bytes.
+  `os.Root`) and returns the path, and at or below `inlineImageBudget` (4 MiB)
+  it *also* appends an MCP `image` content block (chrome-pilot-mcp uses the same
+  ceiling). A screenshot is the one result here a model has to see, and a path
+  alone is useless to a client that cannot read the server's disk. The file
+  stays either way — it is what an oversized screenshot is served from.
+  An image content block must not carry an empty `text` key: a client that only
+  reads text would see an empty answer, which is why `contentItem`'s fields are
+  `omitempty`.
 - **No LLM judgment.** Verdicts are urlscan's; analysis is left to the caller.
 
 ## Gotchas

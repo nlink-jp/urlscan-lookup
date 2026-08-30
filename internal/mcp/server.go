@@ -37,9 +37,15 @@ type toolResult struct {
 	IsError bool          `json:"isError,omitempty"`
 }
 
+// contentItem is one block of a tool result. Text blocks carry Text; image
+// blocks carry base64 Data plus MimeType and no Text, which is why both are
+// omitempty — an image block with an empty "text" key reads as an empty answer
+// to a client that only looks at text.
 type contentItem struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Data     string `json:"data,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
 }
 
 func textResult(isErr bool, text string) toolResult {

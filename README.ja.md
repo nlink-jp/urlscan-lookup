@@ -66,7 +66,9 @@ malicious 判定時に `scan` が exit 1（SOC スクリプト連携用）。
 
 `scan_url` / `get_result` / `search` / `get_screenshot` / `get_quota` /
 `get_usage`。スキャンは非同期で、`scan_url` は UUID を即返し、`get_result` で
-ポーリングします（`processing` は正常状態）。詳細は `get_usage` を参照。
+ポーリングします（`processing` は正常状態）。`get_screenshot` は 4 MiB 以内なら
+PNG を **MCP の image コンテンツとしてインライン返却**するのでモデルが直接見られ、
+同時にワークスペースへも必ず書き出します。詳細は `get_usage` を参照。
 
 ## ビルドとテスト
 
