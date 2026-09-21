@@ -28,6 +28,17 @@ const Instructions = "urlscan-lookup investigates a suspicious URL via the urlsc
 	"lookups that never touch the target. Tool errors are structured JSON ({code, message}). " +
 	"Call get_usage for the full tool reference, quota notes, and error-recovery table."
 
+// obj builds a tool's input schema. Every schema goes through here so that
+// org ADR-021 §10's `additionalProperties: false` is set once instead of being
+// remembered per tool — the next tool added gets the closed schema for free.
+func obj(props map[string]any, required ...string) map[string]any {
+	s := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
+	if len(required) > 0 {
+		s["required"] = required
+	}
+	return s
+}
+
 // toolsList returns the advertised tool set with JSON Schema for each input.
 func toolsList() any {
 	return map[string]any{
@@ -35,67 +46,51 @@ func toolsList() any {
 			{
 				"name":        "get_usage",
 				"description": "Return this server's operating manual (markdown): the tools, result schema, quota notes, and error-recovery table. Call it once before first use.",
-				"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
+				"inputSchema": obj(map[string]any{}),
 			},
 			{
 				"name":        "scan_url",
 				"description": "Submit a NEW active scan of a URL to urlscan.io and return its uuid immediately (the scan runs asynchronously — poll get_result with the uuid). Default visibility is PRIVATE (visible only to this account); pass visibility \"public\" ONLY to deliberately publish the scan to the world (including the attacker). Consumes the low free-plan scan quota.",
-				"inputSchema": map[string]any{
-					"type":     "object",
-					"required": []string{"url"},
-					"properties": map[string]any{
-						"url":        map[string]any{"type": "string", "description": "The http(s) URL to scan."},
-						"visibility": map[string]any{"type": "string", "enum": []string{"private", "unlisted", "public"}, "description": "Scan visibility (default private)."},
-						"country":    map[string]any{"type": "string", "description": "Scanning PoP country code, e.g. jp, de (to defeat geo-fenced phishing)."},
-						"tags":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Tags to attach."},
-						"referer":    map[string]any{"type": "string", "description": "Referer header to send."},
-						"user_agent": map[string]any{"type": "string", "description": "User-Agent to send."},
-					},
-				},
+				"inputSchema": obj(map[string]any{
+					"url":        map[string]any{"type": "string", "description": "The http(s) URL to scan."},
+					"visibility": map[string]any{"type": "string", "enum": []string{"private", "unlisted", "public"}, "description": "Scan visibility (default private)."},
+					"country":    map[string]any{"type": "string", "description": "Scanning PoP country code, e.g. jp, de (to defeat geo-fenced phishing)."},
+					"tags":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Tags to attach."},
+					"referer":    map[string]any{"type": "string", "description": "Referer header to send."},
+					"user_agent": map[string]any{"type": "string", "description": "User-Agent to send."},
+				}, "url"),
 			},
 			{
 				"name":        "get_result",
 				"description": "Fetch a scan result by uuid. While the scan is still running it returns {status:\"processing\"} — that is normal; poll again after a few seconds. Returns the normalized verdict, final URL, observed IPs/domains, and counts.",
-				"inputSchema": map[string]any{
-					"type":     "object",
-					"required": []string{"uuid"},
-					"properties": map[string]any{
-						"uuid":    map[string]any{"type": "string", "description": "The scan uuid returned by scan_url."},
-						"refresh": map[string]any{"type": "boolean", "description": "Bypass the local cache and re-fetch."},
-					},
-				},
+				"inputSchema": obj(map[string]any{
+					"uuid":    map[string]any{"type": "string", "description": "The scan uuid returned by scan_url."},
+					"refresh": map[string]any{"type": "boolean", "description": "Bypass the local cache and re-fetch."},
+				}, "uuid"),
 			},
 			{
 				"name":        "search",
 				"description": "Search the historical PUBLIC scan database (passive; never touches the target — OpSec-safe). Query uses urlscan's ElasticSearch syntax, e.g. 'domain:example.com' or 'page.ip:1.2.3.4'.",
-				"inputSchema": map[string]any{
-					"type":     "object",
-					"required": []string{"query"},
-					"properties": map[string]any{
-						"query":        map[string]any{"type": "string", "description": "urlscan search query (ElasticSearch syntax)."},
-						"size":         map[string]any{"type": "integer", "description": "Number of results (default 100)."},
-						"search_after": map[string]any{"type": "string", "description": "Pagination cursor (sort value of the last row)."},
-						"refresh":      map[string]any{"type": "boolean", "description": "Bypass the local cache and re-fetch."},
-					},
-				},
+				"inputSchema": obj(map[string]any{
+					"query":        map[string]any{"type": "string", "description": "urlscan search query (ElasticSearch syntax)."},
+					"size":         map[string]any{"type": "integer", "description": "Number of results (default 100)."},
+					"search_after": map[string]any{"type": "string", "description": "Pagination cursor (sort value of the last row)."},
+					"refresh":      map[string]any{"type": "boolean", "description": "Bypass the local cache and re-fetch."},
+				}, "query"),
 			},
 			{
 				"name":        "get_screenshot",
 				"description": "Fetch a scan's screenshot PNG. Small screenshots come back inline as MCP image content so you can look at them directly; larger ones are written to the workspace and only the path is returned. Both shapes always carry the path and byte count as text.",
-				"inputSchema": map[string]any{
-					"type":     "object",
-					"required": []string{"uuid"},
-					"properties": map[string]any{
-						"uuid":           map[string]any{"type": "string", "description": "The scan uuid."},
-						"workspace_root": map[string]any{"type": "string", "description": "Directory to write the PNG into — pass one you can read back, since the reply carries the path. Defaults to the server workspace, which is only useful if that is readable to you."},
-						"inline":         map[string]any{"type": "boolean", "description": "Return the image inline when it fits the budget (default true). Set false if your client cannot take image content."},
-					},
-				},
+				"inputSchema": obj(map[string]any{
+					"uuid":           map[string]any{"type": "string", "description": "The scan uuid."},
+					"workspace_root": map[string]any{"type": "string", "description": "Directory to write the PNG into — pass one you can read back, since the reply carries the path. Defaults to the server workspace, which is only useful if that is readable to you."},
+					"inline":         map[string]any{"type": "boolean", "description": "Return the image inline when it fits the budget (default true). Set false if your client cannot take image content."},
+				}, "uuid"),
 			},
 			{
 				"name":        "get_quota",
 				"description": "Report the account's remaining urlscan API quota per action (public/private/unlisted scan, search, retrieve) across the day/hour/minute windows. Free-plan quotas are low — check before batch scanning.",
-				"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
+				"inputSchema": obj(map[string]any{}),
 			},
 		},
 	}

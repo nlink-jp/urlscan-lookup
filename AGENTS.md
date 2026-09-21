@@ -89,6 +89,21 @@ internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
   metadata (`features`, `queryableFields`, `maxSearchResults`, a nested `files`
   object); the client extracts only objects carrying a `day` window.
 - `search` on a free key sees only public scans (`queryVisibility: ["public"]`).
+- **Tool schemas are closed; the decoder is not.** Every `inputSchema` is built
+  by `obj()` in `internal/mcp/tools.go`, which sets `additionalProperties: false`
+  (org ADR-021 §10), and `TestEveryToolSchemaIsValidAndClosed` fails if a tool
+  escapes it — so build a new schema with `obj()`, not a map literal. That flag
+  is only the *declared* half: argument decoding still uses a plain
+  `json.Unmarshal`, so an unknown argument from a client that does not validate
+  the schema is silently ignored rather than refused. ADR-021 pairs the flag with
+  `json.Decoder.DisallowUnknownFields`; that half is not implemented here.
+- **`get_screenshot` still takes `workspace_root`, a spelling ADR-021 §1
+  retired** in favour of `work_dir`. This server was not part of the work-dir
+  migration, so renaming it is a separate job: it needs the transplanted
+  `internal/mcp/workdir` package (resolution, the §4 validation list, the error
+  codes) and the one-cycle compatibility reply that tells a stale caller the new
+  name. Do not rename the argument on its own — the schema is now closed, so a
+  caller passing `work_dir` today is refused by a validating client with no hint.
 
 ## Status
 

@@ -223,3 +223,43 @@ func TestGetScreenshotInlineCanBeDeclined(t *testing.T) {
 		t.Fatalf("inline:false must return text only: %+v", content)
 	}
 }
+
+// TestEveryToolSchemaIsValidAndClosed keeps a mistyped argument from reading as
+// a real one: org ADR-021 §10 requires every registered schema to set
+// additionalProperties:false, and requires this assertion to exist, because a
+// rule stated only in prose is re-decided by whoever adds the next tool.
+//
+// The flag is the declared half of the contract — what a schema-checking client
+// refuses before the call. This server still decodes arguments with a plain
+// json.Unmarshal, so an unknown argument that arrives anyway is ignored rather
+// than refused; see AGENTS.md.
+func TestEveryToolSchemaIsValidAndClosed(t *testing.T) {
+	b, err := json.Marshal(toolsList())
+	if err != nil {
+		t.Fatalf("marshal tool list: %v", err)
+	}
+	var list struct {
+		Tools []struct {
+			Name        string `json:"name"`
+			InputSchema struct {
+				Type                 string `json:"type"`
+				AdditionalProperties *bool  `json:"additionalProperties"`
+			} `json:"inputSchema"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(b, &list); err != nil {
+		t.Fatalf("tool list is not valid JSON: %v", err)
+	}
+	// Without this the loop below passes by having nothing to check.
+	if len(list.Tools) == 0 {
+		t.Fatal("toolsList returned no tools")
+	}
+	for _, tool := range list.Tools {
+		if tool.InputSchema.Type != "object" {
+			t.Errorf("%s: schema type = %q, want object", tool.Name, tool.InputSchema.Type)
+		}
+		if tool.InputSchema.AdditionalProperties == nil || *tool.InputSchema.AdditionalProperties {
+			t.Errorf("%s: schema should set additionalProperties:false so typos are caught", tool.Name)
+		}
+	}
+}
