@@ -3,9 +3,28 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+// clearEnv empties every variable Load reads, so a test sees the defaults and
+// not the machine it runs on.
+func clearEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{
+		"URLSCAN_API_KEY", "URLSCAN_LOOKUP_API_KEY", "URLSCAN_LOOKUP_BASE_URL",
+		"URLSCAN_LOOKUP_VISIBILITY", "URLSCAN_LOOKUP_COUNTRY", "URLSCAN_LOOKUP_CACHE_DIR",
+		"URLSCAN_LOOKUP_WORKSPACE", "URLSCAN_LOOKUP_SCREENSHOT_MAX_BYTES",
+		"URLSCAN_LOOKUP_CACHE_TTL_HOURS", "URLSCAN_LOOKUP_TIMEOUT_SECONDS",
+		"XDG_CONFIG_HOME",
+	} {
+		t.Setenv(k, "")
+	}
+	// A config file in the default location would answer instead of the
+	// defaults; point HOME at an empty directory.
+	t.Setenv("HOME", t.TempDir())
+}
 
 func writeConfig(t *testing.T, body string) string {
 	t.Helper()
@@ -98,5 +117,64 @@ func TestBaseURLTrimsTrailingSlash(t *testing.T) {
 	}
 	if cfg.BaseURL != "https://example.test" {
 		t.Fatalf("base url = %q", cfg.BaseURL)
+	}
+}
+
+// The organization retired file-mediated results on 2026-09-06: a server does
+// not choose a file for data. The setting that named that file is gone, and a
+// configuration still carrying it fails by name — ignoring it would delete a
+// destination the operator believes is in force (the same rule pcap-analyzer's
+// ADR-0009 §5 states for its removed output keys).
+func TestRetiredWorkspaceEnvFailsByName(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("URLSCAN_LOOKUP_WORKSPACE", t.TempDir())
+	_, err := Load("", 0)
+	if err == nil {
+		t.Fatal("a retired setting must not be ignored")
+	}
+	for _, want := range []string{"URLSCAN_LOOKUP_WORKSPACE", "retired"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error does not say %q: %v", want, err)
+		}
+	}
+}
+
+// The inline budget is the operator's, and it is stated from the inside: NaN
+// fails every comparison, so "reject what is out of range" would let it in.
+func TestScreenshotBudgetIsBounded(t *testing.T) {
+	cases := map[string]struct {
+		value string
+		want  int // 0 = the load must fail
+	}{
+		"default when unset": {"", DefaultScreenshotMaxBytes},
+		"a plain count":      {"1048576", 1 << 20},
+		"the ceiling":        {"67108864", 64 << 20},
+		"above the ceiling":  {"67108865", 0},
+		"zero":               {"0", 0},
+		"negative":           {"-1", 0},
+		"NaN":                {"NaN", 0},
+		"infinity":           {"Inf", 0},
+		"not a number":       {"large", 0},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			clearEnv(t)
+			if c.value != "" {
+				t.Setenv("URLSCAN_LOOKUP_SCREENSHOT_MAX_BYTES", c.value)
+			}
+			cfg, err := Load("", 0)
+			if c.want == 0 {
+				if err == nil {
+					t.Fatalf("%q was accepted as a byte budget", c.value)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.ScreenshotMaxBytes != c.want {
+				t.Errorf("budget = %d, want %d", cfg.ScreenshotMaxBytes, c.want)
+			}
+		})
 	}
 }

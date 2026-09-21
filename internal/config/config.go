@@ -34,6 +34,18 @@ const (
 
 	// DefaultSearchSize is the default number of search hits.
 	DefaultSearchSize = 100
+
+	// DefaultScreenshotMaxBytes is the largest screenshot returned inline.
+	// Base64 inflates by a third and an inline image is replayed with the
+	// conversation every round, so this is a budget rather than a limit of the
+	// format; chrome-pilot-mcp uses the same ceiling. A screenshot above it
+	// comes back as its URL and its byte count, never as a file this server
+	// chose (organization decision of 2026-09-06).
+	DefaultScreenshotMaxBytes = 4 << 20
+	// maxScreenshotMaxBytes is the ceiling on the setting itself: a budget
+	// larger than this is a mistake, not a preference, and an unbounded one
+	// would put an arbitrary image into every later round of the conversation.
+	maxScreenshotMaxBytes = 64 << 20
 )
 
 // Config holds resolved runtime settings.
@@ -50,7 +62,8 @@ type Config struct {
 	CacheDir         string        // result/search cache directory
 	CacheTTL         time.Duration // result/search freshness
 	Timeout          time.Duration // network timeout per HTTP exchange
-	WorkspaceDir     string        // default MCP file-mediated output root
+	// ScreenshotMaxBytes is the largest screenshot returned inline (MCP).
+	ScreenshotMaxBytes int
 }
 
 // Load resolves configuration. If configPath is empty the default location
@@ -68,6 +81,8 @@ func Load(configPath string, timeoutOverride time.Duration) (*Config, error) {
 		CacheDir:         DefaultCacheDir(),
 		CacheTTL:         DefaultCacheTTL,
 		Timeout:          DefaultTimeout,
+
+		ScreenshotMaxBytes: DefaultScreenshotMaxBytes,
 	}
 
 	if configPath == "" {
@@ -104,8 +119,19 @@ func Load(configPath string, timeoutOverride time.Duration) (*Config, error) {
 	if v := os.Getenv("URLSCAN_LOOKUP_CACHE_DIR"); v != "" {
 		cfg.CacheDir = expandHome(v)
 	}
-	if v := os.Getenv("URLSCAN_LOOKUP_WORKSPACE"); v != "" {
-		cfg.WorkspaceDir = expandHome(v)
+	// Retired by the organization decision of 2026-09-06: a server does not
+	// choose a file for data. Failing by name beats ignoring a setting the
+	// operator believes is in force.
+	if os.Getenv("URLSCAN_LOOKUP_WORKSPACE") != "" {
+		return nil, fmt.Errorf("URLSCAN_LOOKUP_WORKSPACE is retired: a screenshot now comes back in " +
+			"the response, and this server writes no files (docs/en/adr/0001-screenshots-in-the-response.md)")
+	}
+	if v := os.Getenv("URLSCAN_LOOKUP_SCREENSHOT_MAX_BYTES"); v != "" {
+		n, err := parseByteBudget(v)
+		if err != nil {
+			return nil, fmt.Errorf("URLSCAN_LOOKUP_SCREENSHOT_MAX_BYTES: %w", err)
+		}
+		cfg.ScreenshotMaxBytes = n
 	}
 	if v := os.Getenv("URLSCAN_LOOKUP_CACHE_TTL_HOURS"); v != "" {
 		d, err := parseHours(v)
@@ -216,6 +242,21 @@ func parseHours(v string) (time.Duration, error) {
 		return 0, fmt.Errorf("must not be negative")
 	}
 	return time.Duration(h * float64(time.Hour)), nil
+}
+
+// parseByteBudget reads a positive byte count, stated from the inside: a value
+// is accepted when it lies within [1, maxScreenshotMaxBytes]. Written this way
+// round because a NaN fails every comparison, so "reject what is out of range"
+// lets it through — the defect this fleet fixed on 2026-09-21.
+func parseByteBudget(v string) (int, error) {
+	n, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%q is not a number", v)
+	}
+	if !(n >= 1 && n <= maxScreenshotMaxBytes) {
+		return 0, fmt.Errorf("%q is not a byte count between 1 and %d", v, maxScreenshotMaxBytes)
+	}
+	return int(n), nil
 }
 
 func parseSeconds(v string) (time.Duration, error) {

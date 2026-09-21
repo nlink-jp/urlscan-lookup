@@ -37,7 +37,6 @@ internal/cache/         TTL JSON cache; atomic write; key = namespace+hash(id).
 internal/config/        Sectioned-TOML subset + env/flag resolution.
 internal/engine/        Ties validate+client+cache. Submit and Poll are separate
                         (async job style); Result/Search/Quota are cache-aware.
-internal/workspace/     Agent-provided output dir + os.Root containment.
 internal/app/           CLI: dispatch, scan/search/result/screenshot/quota/cache/mcp, output.
 internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
   usage.md              Embedded get_usage manual.
@@ -62,13 +61,18 @@ internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
   live from `/user/quotas/` and `X-Rate-Limit-*`, never hardcoded.
 - **result/search cached; scan not.** A new scan always generates a new
   result, so it is never served from cache.
-- **Screenshots ride inline when they fit, and are always written to disk.**
-  `get_screenshot` writes the PNG to an agent-provided `workspace_root` (via
-  `os.Root`) and returns the path, and at or below `inlineImageBudget` (4 MiB)
-  it *also* appends an MCP `image` content block (chrome-pilot-mcp uses the same
-  ceiling). A screenshot is the one result here a model has to see, and a path
-  alone is useless to a client that cannot read the server's disk. The file
-  stays either way — it is what an oversized screenshot is served from.
+- **A screenshot comes back in the response; this server writes nothing.**
+  `get_screenshot` appends an MCP `image` content block when the PNG is at or
+  below `cfg.ScreenshotMaxBytes` (default 4 MiB, the ceiling chrome-pilot-mcp
+  also uses — base64 inflates by a third and an inline image is replayed with
+  the conversation every round). Above it the screenshot is **reported, not
+  delivered**: `bytes`, `inline: false`, a `note` naming the budget, and
+  `screenshot_url`. No truncation — half a PNG is nothing — and no file: a
+  server writing data into a file it chose and returning the path was retired
+  fleet-wide on 2026-09-06, because it cannot know the caller's context window.
+  See `docs/en/adr/0001-screenshots-in-the-response.md`. Do not reintroduce a
+  workspace here; if a future tool's *product* is a file, that is ADR-021's
+  `work_dir`, which is a different thing.
   An image content block must not carry an empty `text` key: a client that only
   reads text would see an empty answer, which is why `contentItem`'s fields are
   `omitempty`.
@@ -102,24 +106,18 @@ internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
   is allowed and the decoder is what actually refuses. `decodeArgs` also stops
   discarding the decode error, so a wrong-typed argument no longer runs the tool
   on zero values. Omitted or `null` arguments still mean the empty object. Do
-  not add a `_ = json.Unmarshal` back, and do not add a compatibility shim: the
-  ADR's one-release grace covers only the retired `workspace_root` spellings.
-  **`get_screenshot` is the one handler deliberately left out**, because it
-  still takes one of those spellings — see the next entry.
-  `TestGetScreenshotArgumentsStayLenient` records that exemption as a test, so
-  the work-dir migration is told to delete it rather than work around it.
-- **`get_screenshot` still takes `workspace_root`, a spelling ADR-021 §1
-  retired** in favour of `work_dir`. This server was not part of the work-dir
-  migration, so renaming it is a separate job: it needs the transplanted
-  `internal/mcp/workdir` package (resolution, the §4 validation list, the error
-  codes) and the one-cycle compatibility reply that tells a stale caller the new
-  name. Do not rename the argument on its own — the schema is now closed, so a
-  caller passing `work_dir` today is refused by a validating client with no hint.
+  not add a `_ = json.Unmarshal` back, and do not add a compatibility shim.
+  **Every handler goes through `decodeArgs`, `get_screenshot` included.** It was
+  the one exemption while its `workspace_root` was thought to need a migration
+  to `work_dir`; the argument was withdrawn instead, along with the file it
+  named, so there is no retired spelling left to answer for. ADR-021's
+  one-release grace has nothing to cover on this server.
 
 ## Status
 
 Scaffolding complete and **validated against the real free-plan API**
 (2026-07-17): `quota` / `search` / `scan` (private) / `result` / `screenshot`
 and the MCP `get_quota` + `get_result` async path all work. Tests pass
-(validate, config, cache, urlscan client, engine, mcp, workspace). Pending: the
-release pipeline (Phase 3).
+(validate, config, cache, urlscan client, engine, mcp). Released and in the
+Homebrew tap; the work-directory contract does not apply here, because this
+server writes nothing (ADR-0001).

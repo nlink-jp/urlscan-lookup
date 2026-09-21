@@ -70,9 +70,10 @@ verdict is malicious (for SOC scripting).
 `scan_url`, `get_result`, `search`, `get_screenshot`, `get_quota`,
 `get_usage`. Scans are asynchronous: `scan_url` returns a UUID immediately and
 `get_result` polls (a `processing` status is normal). `get_screenshot` returns
-the PNG as MCP image content when it fits (4 MiB), so a model can look at it
-directly, and always writes it to the workspace as well. Call `get_usage` for
-the full reference.
+the PNG as MCP image content when it fits the inline budget (4 MiB by default),
+so a model can look at it directly; a larger one comes back as its size and its
+urlscan.io URL. This server writes nothing to disk. Call `get_usage` for the
+full reference.
 
 **Arguments are checked strictly.** A call carrying an argument a tool does not
 declare fails with `invalid_input`, naming it — `arguments: json: unknown field
@@ -80,9 +81,10 @@ declare fails with `invalid_input`, naming it — `arguments: json: unknown fiel
 matters here: a misspelt `visibility` used to publish whatever the config said,
 or silently not publish a scan the caller asked to make public. Wrong-typed
 arguments are refused the same way, and nothing runs before the arguments
-decode, so a rejected call spends no quota. `get_screenshot` is the one
-exception and stays lenient while its `workspace_root` is migrated to
-`work_dir`.
+decode, so a rejected call spends no quota. Every tool is checked this
+way, `get_screenshot` included: its `workspace_root` argument went away with the
+file it named (see `docs/en/adr/0001-screenshots-in-the-response.md`), so there
+is no retired spelling left to be lenient about.
 
 ## Build & test
 

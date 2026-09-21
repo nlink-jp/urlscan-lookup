@@ -2,6 +2,33 @@
 
 All notable changes to urlscan-lookup are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking: a screenshot comes back in the response, and this server no longer
+  writes anything to disk.** `get_screenshot` used to write the PNG into a
+  directory — yours via `workspace_root`, or the server's own by default, which
+  in the common case was a path you could not read — and return that path. It
+  now returns the image as MCP content when it fits the inline budget (4 MiB by
+  default, `URLSCAN_LOOKUP_SCREENSHOT_MAX_BYTES`), and for a larger one returns
+  its size, the budget that stopped it, and `screenshot_url` — urlscan.io's own
+  address for the PNG — for you or your runtime to fetch. It is not truncated:
+  half a PNG is not a smaller picture.
+
+  `screenshot_file` is gone from the reply and `workspace_root` from the
+  arguments. A configuration carrying `URLSCAN_LOOKUP_WORKSPACE` now fails to
+  load, by name, rather than having a destination silently ignored.
+
+  Deciding to put a large response on disk is the agent runtime's job, not a
+  server's: a server cannot know your context window. The organisation retired
+  the file-and-path shape fleet-wide on 2026-09-06; this server was the one that
+  still had it. See `docs/en/adr/0001-screenshots-in-the-response.md`.
+
+- `get_screenshot` now refuses an argument it does not declare, like every other
+  tool. It was the one handler left lenient, because `workspace_root` looked
+  like a rename waiting to happen; it was a withdrawal instead.
+
 ## [0.3.0] - 2026-09-21
 
 ### Changed

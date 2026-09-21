@@ -55,17 +55,20 @@ screenshot_url}]}`.
 
 ### get_screenshot
 
-Fetch a scan's screenshot PNG. It is always written into `workspace_root` (an
-agent-prepared writable directory) and the path plus byte count are returned as
-text. A screenshot at or below 4 MiB **also rides inline as MCP image content**,
-so you can look at it directly rather than needing to read the server's disk.
+Fetch a scan's screenshot PNG. It comes back **as MCP image content** when it
+fits the server's inline budget (4 MiB by default), so you can look at it
+directly. **Nothing is written to disk.**
 
-Arguments: `uuid` (required), `workspace_root` (optional; defaults to the server
-workspace), `inline` (optional, default true — set false if your client cannot
-take image content).
+Above the budget the screenshot is reported, not delivered: the reply carries
+`bytes`, `inline: false`, a `note` naming the budget that stopped it, and
+`screenshot_url` — urlscan.io's own address for the PNG — which you or your
+runtime can fetch. It is not truncated, because half a PNG is not a smaller
+picture. Base64 inflates by a third and an inline image is replayed with the
+conversation every round, which is what the budget is for.
 
-Above 4 MiB the result is file-only: base64 inflates by a third, and an inline
-image is replayed with the conversation every round.
+Arguments: `uuid` (required), `inline` (optional, default true — set false if
+your client cannot take image content; the reply then carries the size and the
+URL only).
 
 ### get_quota
 
@@ -91,9 +94,10 @@ the configured default, so asking for `public` and mistyping it published
 nothing, and asking for `private` and mistyping it published whatever the
 config said.
 
-`get_screenshot` is the one exception: its arguments are still decoded
-leniently while its `workspace_root` is migrated to `work_dir`. Spell its
-arguments carefully — a typo there is still ignored.
+This holds for every tool, `get_screenshot` included. It used to be the one
+exception, while its `workspace_root` argument looked like a rename waiting to
+happen; the argument was withdrawn along with the file it named, so there is
+nothing left there to be lenient about.
 
 ## Errors
 

@@ -66,9 +66,10 @@ malicious 判定時に `scan` が exit 1（SOC スクリプト連携用）。
 
 `scan_url` / `get_result` / `search` / `get_screenshot` / `get_quota` /
 `get_usage`。スキャンは非同期で、`scan_url` は UUID を即返し、`get_result` で
-ポーリングします（`processing` は正常状態）。`get_screenshot` は 4 MiB 以内なら
-PNG を **MCP の image コンテンツとしてインライン返却**するのでモデルが直接見られ、
-同時にワークスペースへも必ず書き出します。詳細は `get_usage` を参照。
+ポーリングします（`processing` は正常状態）。`get_screenshot` は上限内（既定
+4 MiB）なら PNG を **MCP の image コンテンツとしてインライン返却**するのでモデルが
+直接見られ、上限を超える場合はサイズと urlscan.io の URL を返します。このサーバーは
+ディスクに何も書きません。詳細は `get_usage` を参照。
 
 **引数は厳格に検査されます.** ツールが宣言していない引数を含む呼び出しは
 `invalid_input` で失敗し、その名前を挙げます（`arguments: json: unknown field
@@ -76,8 +77,10 @@ PNG を **MCP の image コンテンツとしてインライン返却**するの
 引数です——`visibility` の綴り間違いは、設定ファイルの値で公開してしまうか、
 逆に public を意図した呼び出しを何も公開しないまま終わらせていました。型が違う
 引数も同様に拒否され、引数のデコードより前には何も実行しないため、拒否された
-呼び出しはクォータを消費しません。`get_screenshot` のみ例外で、`workspace_root`
-を `work_dir` へ移行するまでは従来どおり寛容に解釈します。
+呼び出しはクォータを消費しません。`get_screenshot` も同様に検査されます。この
+ツールの `workspace_root` 引数は、それが指していたファイルとともに無くなったため
+（`docs/ja/adr/0001-screenshots-in-the-response.ja.md`）、寛容に扱うべき廃止綴りは
+残っていません。
 
 ## ビルドとテスト
 

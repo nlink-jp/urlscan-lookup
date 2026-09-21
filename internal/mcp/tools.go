@@ -8,11 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/nlink-jp/urlscan-lookup/internal/config"
 	"github.com/nlink-jp/urlscan-lookup/internal/engine"
 	"github.com/nlink-jp/urlscan-lookup/internal/urlscan"
 	"github.com/nlink-jp/urlscan-lookup/internal/validate"
-	"github.com/nlink-jp/urlscan-lookup/internal/workspace"
 )
 
 // usageMarkdown is the operating manual returned by the get_usage tool.
@@ -54,10 +55,9 @@ func obj(props map[string]any, required ...string) map[string]any {
 // a private scan and typo'd the argument got whatever the config said, and a
 // caller that deliberately asked for a public one silently did not publish.
 //
-// `get_screenshot` is deliberately not routed through here yet: its
-// `workspace_root` argument is a retired ADR-021 §1 spelling being migrated to
-// `work_dir` separately, and that migration owns the decision about how a
-// stale spelling is answered (the ADR's one-release grace).
+// Every tool goes through this, `get_screenshot` included: its `workspace_root`
+// argument went away with the file it named (ADR-0001), so there is no longer a
+// retired spelling to answer for.
 func decodeArgs(raw json.RawMessage, into any) error {
 	raw = bytes.TrimSpace(raw)
 	// Omitted or null arguments mean the empty object, not an error: a tool
@@ -114,11 +114,10 @@ func toolsList() any {
 			},
 			{
 				"name":        "get_screenshot",
-				"description": "Fetch a scan's screenshot PNG. Small screenshots come back inline as MCP image content so you can look at them directly; larger ones are written to the workspace and only the path is returned. Both shapes always carry the path and byte count as text.",
+				"description": "Fetch a scan's screenshot PNG. It comes back inline as MCP image content when it fits the server's budget (4 MiB by default) so you can look at it directly. A larger one is not returned as bytes and is not written anywhere: the reply carries its size, the budget that stopped it, and the urlscan.io URL to fetch it from. Nothing is written to disk.",
 				"inputSchema": obj(map[string]any{
-					"uuid":           map[string]any{"type": "string", "description": "The scan uuid."},
-					"workspace_root": map[string]any{"type": "string", "description": "Directory to write the PNG into — pass one you can read back, since the reply carries the path. Defaults to the server workspace, which is only useful if that is readable to you."},
-					"inline":         map[string]any{"type": "boolean", "description": "Return the image inline when it fits the budget (default true). Set false if your client cannot take image content."},
+					"uuid":   map[string]any{"type": "string", "description": "The scan uuid."},
+					"inline": map[string]any{"type": "boolean", "description": "Return the image inline when it fits the budget (default true). Set false if your client cannot take image content; the reply then carries the size and the URL only."},
 				}, "uuid"),
 			},
 			{
@@ -247,33 +246,18 @@ func (s *server) toolSearch(ctx context.Context, args json.RawMessage) toolResul
 }
 
 // inlineImageBudget caps the PNG returned inline as MCP image content. Base64
-// inflates by a third, and an inline image is replayed with the conversation
-// every round, so a large screenshot stays file-only (chrome-pilot-mcp uses the
-// same 4 MiB ceiling).
-const inlineImageBudget = 4 << 20
-
 func (s *server) toolGetScreenshot(ctx context.Context, args json.RawMessage) toolResult {
 	var a struct {
-		UUID          string `json:"uuid"`
-		WorkspaceRoot string `json:"workspace_root"`
-		Inline        *bool  `json:"inline"`
+		UUID   string `json:"uuid"`
+		Inline *bool  `json:"inline"`
 	}
-	// NOT decodeArgs: see its doc comment. `workspace_root` is a retired
-	// ADR-021 §1 spelling whose migration to `work_dir` owns this handler's
-	// argument handling, including how a stale spelling is answered.
-	_ = json.Unmarshal(args, &a)
+	if err := decodeArgs(args, &a); err != nil {
+		return errorResult("invalid_input", err.Error())
+	}
 	if a.UUID == "" {
 		return errorResult("invalid_input", "provide 'uuid'")
 	}
 	clean, err := validate.UUID(a.UUID)
-	if err != nil {
-		return errorResult("invalid_input", err.Error())
-	}
-	dir := a.WorkspaceRoot
-	if dir == "" {
-		dir = s.cfg.WorkspaceDir
-	}
-	ws, err := workspace.Ensure(dir)
 	if err != nil {
 		return errorResult("invalid_input", err.Error())
 	}
@@ -284,16 +268,31 @@ func (s *server) toolGetScreenshot(ctx context.Context, args json.RawMessage) to
 	if err != nil {
 		return mapError(err)
 	}
-	path, err := ws.WriteFileAtomic(clean+".png", png)
-	if err != nil {
-		return errorResult("workspace_error", err.Error())
+
+	budget := s.cfg.ScreenshotMaxBytes
+	if budget <= 0 {
+		budget = config.DefaultScreenshotMaxBytes
 	}
-	res := jsonResult(map[string]any{"uuid": clean, "screenshot_file": path, "bytes": len(png)})
+	inline := (a.Inline == nil || *a.Inline) && len(png) <= budget
+	out := map[string]any{
+		"uuid":           clean,
+		"bytes":          len(png),
+		"inline":         inline,
+		"screenshot_url": screenshotURL(s.cfg.BaseURL, clean),
+	}
 	// A screenshot is the one result here a model has to *see*, and MCP carries
-	// image content natively — a path alone is useless to a client that cannot
-	// read the server's disk. The file stays either way: it is what an oversized
-	// screenshot, and any later reference to the same scan, is served from.
-	if (a.Inline == nil || *a.Inline) && len(png) <= inlineImageBudget {
+	// image content natively. What this server does NOT do is turn the image
+	// into a file of its own choosing above a threshold and hand back a path:
+	// that shape was retired fleet-wide on 2026-09-06 — a server cannot know the
+	// caller's context window, and putting a large response on disk is the
+	// runtime's job. So an oversized screenshot is reported, not delivered, and
+	// the URL is what anyone (runtime or person) fetches it from.
+	if !inline {
+		out["note"] = fmt.Sprintf("screenshot is %d bytes, above the %d-byte inline budget; "+
+			"fetch it from screenshot_url", len(png), budget)
+	}
+	res := jsonResult(out)
+	if inline {
 		res.Content = append(res.Content, contentItem{
 			Type:     "image",
 			Data:     base64.StdEncoding.EncodeToString(png),
@@ -301,6 +300,13 @@ func (s *server) toolGetScreenshot(ctx context.Context, args json.RawMessage) to
 		})
 	}
 	return res
+}
+
+// screenshotURL is urlscan.io's own address for a scan's PNG — the same path
+// the client fetches. Reported rather than guessed at by the caller, and the
+// only thing this server hands back when the image is too large to inline.
+func screenshotURL(baseURL, uuid string) string {
+	return strings.TrimRight(baseURL, "/") + "/screenshots/" + uuid + ".png"
 }
 
 func (s *server) toolGetQuota(ctx context.Context) toolResult {

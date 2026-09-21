@@ -119,16 +119,14 @@ func TestOmittedArgumentsStillMeanNone(t *testing.T) {
 	}
 }
 
-// TestGetScreenshotArgumentsStayLenient records, as a test rather than only a
-// comment, that one handler is deliberately outside the sweep: its
-// `workspace_root` is a retired ADR-021 §1 spelling whose migration to
-// `work_dir` owns how a stale or unknown argument there is answered. When that
-// migration lands it should delete this test, not work around it.
-func TestGetScreenshotArgumentsStayLenient(t *testing.T) {
+// The handler that used to be outside the sweep. Its `workspace_root` went away
+// with the file it named (ADR-0001), so there is no retired spelling left to
+// answer for and no reason to be lenient here.
+func TestGetScreenshotRefusesAnUnknownArgument(t *testing.T) {
 	fc := &fakeClient{png: []byte("png")}
-	req := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_screenshot","arguments":{"uuid":"0199b3c4-0000-4000-8000-000000000000","workspace_rooot":"/tmp"}}}`
+	req := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_screenshot","arguments":{"uuid":"0199b3c4-0000-4000-8000-000000000000","workspace_root":"/tmp"}}}`
 	_, msg, isErr := errText(t, drive(t, fc, req)[0])
-	if isErr && strings.Contains(msg, "unknown field") {
-		t.Fatalf("get_screenshot is now strict — fold it into the sweep and delete this test: %s", msg)
+	if !isErr || !strings.Contains(msg, "unknown field") || !strings.Contains(msg, "workspace_root") {
+		t.Fatalf("an unknown argument must be refused by name: isError=%v msg=%q", isErr, msg)
 	}
 }

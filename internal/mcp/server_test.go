@@ -59,7 +59,17 @@ func testServer(t *testing.T, fc *fakeClient) (*engine.Engine, *config.Config) {
 // responses.
 func drive(t *testing.T, fc *fakeClient, requests ...string) []response {
 	t.Helper()
+	return driveWith(t, fc, nil, requests...)
+}
+
+// driveWith is drive with a chance to adjust the configuration the server runs
+// on, for the settings a caller cannot pass as an argument.
+func driveWith(t *testing.T, fc *fakeClient, tune func(*config.Config), requests ...string) []response {
+	t.Helper()
 	e, cfg := testServer(t, fc)
+	if tune != nil {
+		tune(cfg)
+	}
 	in := strings.NewReader(strings.Join(requests, "\n") + "\n")
 	var out strings.Builder
 	if err := Serve(e, cfg, "test", in, &out); err != nil {
@@ -176,20 +186,22 @@ func toolContent(t *testing.T, r response) []contentItem {
 
 func screenshotCall(t *testing.T, fc *fakeClient, extra string) []contentItem {
 	t.Helper()
-	ws := t.TempDir()
-	req := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_screenshot","arguments":{"uuid":"c1b2a3d4-1111-2222-3333-444455556666","workspace_root":%q%s}}}`, ws, extra)
+	req := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_screenshot","arguments":{"uuid":"c1b2a3d4-1111-2222-3333-444455556666"%s}}}`, extra)
 	return toolContent(t, drive(t, fc, req)[0])
 }
 
 // A screenshot is the one result a model has to *see*. MCP carries image
-// content natively, so a small one rides inline alongside the path.
+// content natively, so one that fits the budget rides inline.
 func TestGetScreenshotReturnsImageInline(t *testing.T) {
 	content := screenshotCall(t, &fakeClient{}, "")
 	if len(content) != 2 {
 		t.Fatalf("want a text block and an image block, got %d: %+v", len(content), content)
 	}
-	if content[0].Type != "text" || !strings.Contains(content[0].Text, "screenshot_file") {
+	if content[0].Type != "text" || !strings.Contains(content[0].Text, `"inline": true`) {
 		t.Errorf("first block must stay the text metadata: %+v", content[0])
+	}
+	if strings.Contains(content[0].Text, "screenshot_file") {
+		t.Errorf("no file is written any more, so no path may be reported: %s", content[0].Text)
 	}
 	img := content[1]
 	if img.Type != "image" || img.MimeType != "image/png" {
@@ -204,15 +216,43 @@ func TestGetScreenshotReturnsImageInline(t *testing.T) {
 	}
 }
 
-// Base64 inflates by a third and an inline image is replayed every round, so a
-// large screenshot stays file-only.
-func TestGetScreenshotOversizedStaysFileOnly(t *testing.T) {
-	content := screenshotCall(t, &fakeClient{png: make([]byte, inlineImageBudget+1)}, "")
+// Base64 inflates by a third and an inline image is replayed with the
+// conversation every round, so a screenshot above the budget is not returned as
+// bytes. It is also not written anywhere: a server does not choose a file for
+// data (the organization decision of 2026-09-06, this project's ADR-0001). What
+// comes back is the size, the budget that stopped it, and the URL.
+func TestGetScreenshotOversizedIsReportedNotDelivered(t *testing.T) {
+	big := make([]byte, config.DefaultScreenshotMaxBytes+1)
+	content := screenshotCall(t, &fakeClient{png: big}, "")
 	if len(content) != 1 || content[0].Type != "text" {
 		t.Fatalf("an oversized screenshot must not be inlined: %+v", content)
 	}
-	if !strings.Contains(content[0].Text, "screenshot_file") {
-		t.Errorf("the path must still be returned: %s", content[0].Text)
+	text := content[0].Text
+	for _, want := range []string{
+		`"inline": false`,
+		"screenshot_url",
+		"/screenshots/c1b2a3d4-1111-2222-3333-444455556666.png",
+		"above the",
+		"inline budget",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the reply does not carry %q: %s", want, text)
+		}
+	}
+	if strings.Contains(text, "screenshot_file") {
+		t.Errorf("a path means a file was written, which this server no longer does: %s", text)
+	}
+}
+
+// The budget is the operator's, and a screenshot that fits a raised one is
+// inlined rather than merely described.
+func TestGetScreenshotBudgetIsConfigurable(t *testing.T) {
+	png := make([]byte, config.DefaultScreenshotMaxBytes+1)
+	content := toolContent(t, driveWith(t, &fakeClient{png: png},
+		func(c *config.Config) { c.ScreenshotMaxBytes = len(png) },
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_screenshot","arguments":{"uuid":"c1b2a3d4-1111-2222-3333-444455556666"}}}`)[0])
+	if len(content) != 2 || content[1].Type != "image" {
+		t.Fatalf("a screenshot inside the configured budget must be inlined: %+v", content)
 	}
 }
 
