@@ -74,6 +74,16 @@ the PNG as MCP image content when it fits (4 MiB), so a model can look at it
 directly, and always writes it to the workspace as well. Call `get_usage` for
 the full reference.
 
+**Arguments are checked strictly.** A call carrying an argument a tool does not
+declare fails with `invalid_input`, naming it — `arguments: json: unknown field
+"visibilty"` — rather than running without it. That default-fallback is why it
+matters here: a misspelt `visibility` used to publish whatever the config said,
+or silently not publish a scan the caller asked to make public. Wrong-typed
+arguments are refused the same way, and nothing runs before the arguments
+decode, so a rejected call spends no quota. `get_screenshot` is the one
+exception and stays lenient while its `workspace_root` is migrated to
+`work_dir`.
+
 ## Build & test
 
 ```bash

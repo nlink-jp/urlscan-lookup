@@ -4,6 +4,37 @@ All notable changes to urlscan-lookup are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **An MCP tool call carrying an argument the tool does not declare now fails
+  instead of being quietly ignored.** This is a deliberate behaviour change,
+  required by org ADR-021 §4, and on this server it is the visibility argument
+  that makes it urgent: until now `visibilty` instead of `visibility` was
+  dropped and the scan fell back to the configured default, so a caller who
+  asked for a private scan and mistyped the argument got whatever the config
+  said — and a caller who deliberately asked for `public` silently did not
+  publish. `scan_url`, `get_result`, `search`, `get_quota` and `get_usage` now
+  decode with `DisallowUnknownFields` and refuse the call, naming the offending
+  field:
+  `{"code":"invalid_input","message":"arguments: json: unknown field \"visibilty\""}`.
+
+  A malformed argument object is refused for the same reason. The decode error
+  used to be discarded along with the unknown field, so `{"url": 1}` ran as if
+  no URL had been supplied and came back with "provide 'url'", an answer that
+  contradicted the request. It now reports the type mismatch.
+
+  Nothing runs before the arguments decode, so a rejected call submits no scan
+  and spends no quota. Omitting `arguments`, or sending `{}` or `null`, still
+  means "no arguments" and is not an error. There is no compatibility shim: an
+  argument name this server does not declare has never meant anything, so the
+  only fix is to correct it.
+
+  **`get_screenshot` is the one exception and stays lenient for now**: its
+  `workspace_root` argument is a spelling ADR-021 §1 retired in favour of
+  `work_dir`, and that migration — which owns how a stale spelling is answered
+  — is a separate job. An unknown argument to `get_screenshot` is still
+  ignored. Everything else in the server refuses one.
+
 ### Fixed
 
 - **Every MCP tool input schema is closed.** The six schemas omitted
@@ -13,10 +44,7 @@ All notable changes to urlscan-lookup are documented here.
   default rather than failing. Schemas are now built through a single `obj()`
   helper that sets the flag, and an arch test fails if a tool's schema omits it
   — org ADR-021 §10 requires the test as well as the flag, because a rule
-  stated only in prose is re-decided by whoever adds the next tool. The server's
-  own argument decoding is unchanged and still lenient: it does not use
-  `DisallowUnknownFields`, so an unknown argument that reaches it is ignored
-  rather than refused.
+  stated only in prose is re-decided by whoever adds the next tool.
 
 ## [0.2.0] - 2026-08-31
 

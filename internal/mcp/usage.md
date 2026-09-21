@@ -77,6 +77,24 @@ before batch scanning.
 
 Returns this manual. No arguments.
 
+## Arguments are strict
+
+`scan_url`, `get_result`, `search`, `get_quota` and `get_usage` refuse an
+argument they do not declare, naming it: `arguments: json: unknown field
+"visibilty"`. A wrong-typed argument is refused the same way. Nothing runs
+before the arguments decode, so a rejected call submits no scan and spends no
+quota — fix the name or the type and call again.
+
+This is the enforcing half of the closed schemas (org ADR-021 §4), and
+`visibility` is why it matters most here: a misspelt one used to fall back to
+the configured default, so asking for `public` and mistyping it published
+nothing, and asking for `private` and mistyping it published whatever the
+config said.
+
+`get_screenshot` is the one exception: its arguments are still decoded
+leniently while its `workspace_root` is migrated to `work_dir`. Spell its
+arguments carefully — a typo there is still ignored.
+
 ## Errors
 
 Tool errors are structured JSON: `{"code": "...", "message": "..."}`.
@@ -84,6 +102,8 @@ Tool errors are structured JSON: `{"code": "...", "message": "..."}`.
 | code | meaning | recovery |
 |------|---------|----------|
 | `invalid_input` | The URL/UUID/query failed the safety gate. Nothing was sent to the network. | Fix the argument (URL must be http/https; uuid must be the 36-char form). |
+| `invalid_input` + `arguments: json: unknown field "…"` | An argument name this tool does not declare — usually a typo. Nothing was sent to the network and no quota was spent. | Fix the spelling and call again; the named field is the offending one. Note `get_screenshot` does not yet check this. |
+| `invalid_input` + `arguments: json: cannot unmarshal …` | An argument of the wrong JSON type (`tags` is an array, `size` an integer, `refresh` a boolean). | Check the argument's type in the tool list above and call again. |
 | `no_api_key` | No urlscan API key is configured. | Set `URLSCAN_API_KEY` (a free-plan key) and restart the server. |
 | `rate_limited` | A per-action free-plan quota is exhausted (HTTP 429). | Wait for the window to reset; call get_quota to see remaining. Only 200s consume quota. |
 | `not_ready` | The screenshot is not generated yet. | The scan may still be running or produced none; poll get_result first. |

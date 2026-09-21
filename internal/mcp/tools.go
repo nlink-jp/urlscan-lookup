@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/base64"
@@ -37,6 +38,39 @@ func obj(props map[string]any, required ...string) map[string]any {
 		s["required"] = required
 	}
 	return s
+}
+
+// decodeArgs decodes a tool's arguments strictly: an argument the tool does not
+// declare is refused by name, and a malformed argument object is refused rather
+// than read as an empty one.
+//
+// obj() above is only the declared half of org ADR-021 §4 — what a
+// schema-checking client refuses before the call. This is the half that
+// actually refuses, and it is needed because not every client checks the
+// schema. The `_ = json.Unmarshal` this replaces discarded the decode error as
+// well as the unknown field, so both defects were silent in the same way — and
+// on this server the consequence is the sharpest in the fleet: a misspelt
+// `visibility` fell back to the configured default, so a caller that asked for
+// a private scan and typo'd the argument got whatever the config said, and a
+// caller that deliberately asked for a public one silently did not publish.
+//
+// `get_screenshot` is deliberately not routed through here yet: its
+// `workspace_root` argument is a retired ADR-021 §1 spelling being migrated to
+// `work_dir` separately, and that migration owns the decision about how a
+// stale spelling is answered (the ADR's one-release grace).
+func decodeArgs(raw json.RawMessage, into any) error {
+	raw = bytes.TrimSpace(raw)
+	// Omitted or null arguments mean the empty object, not an error: a tool
+	// whose arguments are all optional is legitimately called with none.
+	if len(raw) == 0 || string(raw) == "null" {
+		raw = []byte("{}")
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(into); err != nil {
+		return errors.New("arguments: " + err.Error())
+	}
+	return nil
 }
 
 // toolsList returns the advertised tool set with JSON Schema for each input.
@@ -107,6 +141,10 @@ func (s *server) toolsCall(params json.RawMessage) (toolResult, *rpcError) {
 	ctx := context.Background()
 	switch p.Name {
 	case "get_usage":
+		// No arguments — which still means "none", not "any".
+		if err := decodeArgs(p.Arguments, &struct{}{}); err != nil {
+			return errorResult("invalid_input", err.Error()), nil
+		}
 		return textResult(false, usageMarkdown), nil
 	case "scan_url":
 		return s.toolScanURL(ctx, p.Arguments), nil
@@ -117,6 +155,9 @@ func (s *server) toolsCall(params json.RawMessage) (toolResult, *rpcError) {
 	case "get_screenshot":
 		return s.toolGetScreenshot(ctx, p.Arguments), nil
 	case "get_quota":
+		if err := decodeArgs(p.Arguments, &struct{}{}); err != nil {
+			return errorResult("invalid_input", err.Error()), nil
+		}
 		return s.toolGetQuota(ctx), nil
 	default:
 		return toolResult{}, &rpcError{Code: -32602, Message: "unknown tool: " + p.Name}
@@ -132,7 +173,9 @@ func (s *server) toolScanURL(ctx context.Context, args json.RawMessage) toolResu
 		Referer    string   `json:"referer"`
 		UserAgent  string   `json:"user_agent"`
 	}
-	_ = json.Unmarshal(args, &a)
+	if err := decodeArgs(args, &a); err != nil {
+		return errorResult("invalid_input", err.Error())
+	}
 	if a.URL == "" {
 		return errorResult("invalid_input", "provide 'url' (an http(s) URL to scan)")
 	}
@@ -164,7 +207,9 @@ func (s *server) toolGetResult(ctx context.Context, args json.RawMessage) toolRe
 		UUID    string `json:"uuid"`
 		Refresh bool   `json:"refresh"`
 	}
-	_ = json.Unmarshal(args, &a)
+	if err := decodeArgs(args, &a); err != nil {
+		return errorResult("invalid_input", err.Error())
+	}
 	if a.UUID == "" {
 		return errorResult("invalid_input", "provide 'uuid'")
 	}
@@ -188,7 +233,9 @@ func (s *server) toolSearch(ctx context.Context, args json.RawMessage) toolResul
 		SearchAfter string `json:"search_after"`
 		Refresh     bool   `json:"refresh"`
 	}
-	_ = json.Unmarshal(args, &a)
+	if err := decodeArgs(args, &a); err != nil {
+		return errorResult("invalid_input", err.Error())
+	}
 	if a.Query == "" {
 		return errorResult("invalid_input", "provide 'query' (urlscan ElasticSearch syntax)")
 	}
@@ -211,6 +258,9 @@ func (s *server) toolGetScreenshot(ctx context.Context, args json.RawMessage) to
 		WorkspaceRoot string `json:"workspace_root"`
 		Inline        *bool  `json:"inline"`
 	}
+	// NOT decodeArgs: see its doc comment. `workspace_root` is a retired
+	// ADR-021 §1 spelling whose migration to `work_dir` owns this handler's
+	// argument handling, including how a stale spelling is answered.
 	_ = json.Unmarshal(args, &a)
 	if a.UUID == "" {
 		return errorResult("invalid_input", "provide 'uuid'")
