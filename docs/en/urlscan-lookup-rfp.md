@@ -48,6 +48,13 @@ layer tools.
 
 **MCP tools** (asynchronous job style; never block for long):
 
+> Superseded in part. `get_screenshot` no longer takes a `workspace_root` and
+> writes nothing to disk: the PNG comes back in the response as image content
+> within a byte budget, and above it the size and urlscan's own URL are
+> reported instead. See
+> [adr/0001-screenshots-in-the-response.md](adr/0001-screenshots-in-the-response.md).
+> This document is kept as the record of what was planned.
+
 - `scan_url` — `{ url, visibility?, country?, tags?, referer?, user_agent? }` → **returns the UUID immediately** (never blocks). `visibility` defaults to `private`
 - `get_result` — `{ uuid }` → if incomplete, `{ status:"processing", uuid, elapsed }`; if complete, the normalized result + metadata. urlscan's 404 (incomplete) / 410 (deleted) are caught and returned as **normal responses** ("processing" is a valid state, not an error)
 - `search` — `{ query, size? }` → list of hits (large results mediated via a workspace file)

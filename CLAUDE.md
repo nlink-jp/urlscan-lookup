@@ -34,7 +34,6 @@ internal/urlscan/       urlscan API v1 client (API-Key header, backoff+jitter, X
 internal/cache/         Per-key TTL cache for result/search (scan never cached), atomic writes
 internal/config/        Sectioned-TOML subset + URLSCAN_LOOKUP_* / URLSCAN_API_KEY env/flag resolution
 internal/engine/        validate → cache → client; Submit/Poll split for async; shared by CLI + MCP
-internal/workspace/     Agent-provided output dir + os.Root containment (MCP file-mediated screenshots)
 internal/app/           Dispatch + scan/search/result/screenshot/quota/cache/mcp; --json etc.
 internal/mcp/           Zero-dep stdio JSON-RPC 2.0 server; async job style
   usage.md              Embedded get_usage manual
@@ -69,6 +68,13 @@ tests. **No external dependencies — standard library only.**
   save the low quota. `scan` (new generation) is never cached.
 - **Key is a secret.** `URLSCAN_API_KEY` is canonical; sent via the `API-Key`
   header (strictly that name); never logged or placed in a URL.
+- **Screenshots come back in the response; nothing is written to disk.**
+  `get_screenshot` returns the PNG as MCP image content within a byte budget
+  (`screenshot_max_bytes`, 4 MiB default) and above it reports the size and
+  urlscan's own URL instead. Turning a response into a file the server chose
+  is the runtime's job, not this server's — see
+  [docs/en/adr/0001-screenshots-in-the-response.md](docs/en/adr/0001-screenshots-in-the-response.md)
+  and org ADR-021. Do not reintroduce a workspace here.
 - **No LLM judgment.** The tool retrieves raw material; verdicts are urlscan's,
   and analysis is left to the calling agent/tool (built for MCP use).
 - **Exit codes:** `0` success / `2` error. `--fail-on-malicious` makes a
@@ -81,9 +87,14 @@ Scaffolding complete and **validated against the real free-plan API**
 (2026-07-17): `quota` / `search` / `scan` (private, submit→poll→result) /
 `result` (cache hit) / `screenshot` / MCP `get_quota` + `get_result` all work.
 Confirmed private scans are available on the free plan at **50/day** (so the
-default-`private` design needs no fallback). Remaining: release (Phase 3 —
-sign/notarize, submodule, catalog, brew, check-org). Design:
-[docs/ja/urlscan-lookup-rfp.ja.md](docs/ja/urlscan-lookup-rfp.ja.md).
+default-`private` design needs no fallback). Released and integrated into the
+org (submodule, catalog, brew tap, check-org); `git tag` is the authority on
+which version.
+
+The original design is [docs/ja/urlscan-lookup-rfp.ja.md](docs/ja/urlscan-lookup-rfp.ja.md),
+kept as the record of what was planned. Where it and an ADR disagree, the ADR
+is current: the RFP's file-mediated `get_screenshot` was withdrawn by
+[docs/en/adr/0001-screenshots-in-the-response.md](docs/en/adr/0001-screenshots-in-the-response.md).
 
 ## Communication Language
 

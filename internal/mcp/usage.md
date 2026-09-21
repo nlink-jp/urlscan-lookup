@@ -106,7 +106,7 @@ Tool errors are structured JSON: `{"code": "...", "message": "..."}`.
 | code | meaning | recovery |
 |------|---------|----------|
 | `invalid_input` | The URL/UUID/query failed the safety gate. Nothing was sent to the network. | Fix the argument (URL must be http/https; uuid must be the 36-char form). |
-| `invalid_input` + `arguments: json: unknown field "…"` | An argument name this tool does not declare — usually a typo. Nothing was sent to the network and no quota was spent. | Fix the spelling and call again; the named field is the offending one. Note `get_screenshot` does not yet check this. |
+| `invalid_input` + `arguments: json: unknown field "…"` | An argument name this tool does not declare — usually a typo. Nothing was sent to the network and no quota was spent. | Fix the spelling and call again; the named field is the offending one. Every tool answers this way, `get_screenshot` included. |
 | `invalid_input` + `arguments: json: cannot unmarshal …` | An argument of the wrong JSON type (`tags` is an array, `size` an integer, `refresh` a boolean). | Check the argument's type in the tool list above and call again. |
 | `no_api_key` | No urlscan API key is configured. | Set `URLSCAN_API_KEY` (a free-plan key) and restart the server. |
 | `rate_limited` | A per-action free-plan quota is exhausted (HTTP 429). | Wait for the window to reset; call get_quota to see remaining. Only 200s consume quota. |

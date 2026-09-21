@@ -2,6 +2,23 @@
 
 All notable changes to urlscan-lookup are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- **The embedded manual said `get_screenshot` skips the strict argument check.**
+  It does not, and has not since 0.4.0 — the error table kept a row from before
+  the change, contradicting a paragraph in the same file. `get_usage` is what a
+  model reads to decide whether to trust an error, so that row told it to retry
+  a call that will keep failing and to distrust the message naming the typo.
+  A test now compares the manual against the registry: every tool must be named
+  in it, and no wording may carve a tool out of the check.
+- **Stale project documents.** `CLAUDE.md` still listed the deleted
+  `internal/workspace/` in the architecture and described the tool as awaiting
+  release; the RFP still specified the withdrawn file-mediated
+  `get_screenshot`. The RFP is kept as the record of what was planned, with a
+  note that the ADR supersedes it (both languages).
+
 ## [0.4.0] - 2026-09-21
 
 ### Changed

@@ -44,6 +44,12 @@ CTI / IR 実務者と、それを MCP 経由で呼び出す調査エージェン
 
 **MCP ツール**（非同期ジョブ型。長時間ブロックしない）:
 
+> 一部は撤回済み。`get_screenshot` は `workspace_root` を取らず、ディスクには
+> 何も書きません。PNG はバイト上限の内側なら image コンテンツとして応答で返り、
+> 上限を超える場合はサイズと urlscan 自身の URL を返します。
+> [adr/0001-screenshots-in-the-response.ja.md](adr/0001-screenshots-in-the-response.ja.md)
+> を参照。この文書は「何を計画したか」の記録として残しています。
+
 - `scan_url` — `{ url, visibility?, country?, tags?, referer?, user_agent? }` → **UUID を即返し**（決してブロックしない）。
   `visibility` 既定 `private`
 - `get_result` — `{ uuid }` → 未完成なら `{ status:"processing", uuid, elapsed }`、完成なら正規化結果 + メタ。
