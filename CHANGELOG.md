@@ -4,6 +4,25 @@ All notable changes to urlscan-lookup are documented here.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-14
+
+### Security
+
+- **Rebuilt with Go 1.27.4, which `go.mod` now requires** (it was `go 1.25.0`).
+  No code of the tool changed. v0.4.1 was built with Go 1.27.1; `govulncheck
+  -mode binary` finds 10 standard-library advisories in its darwin-arm64
+  binary, in `crypto/tls`, `crypto/x509`, `net/http` and `net/textproto`:
+  GO-2026-6603, GO-2026-6605, GO-2026-6607, GO-2026-6608, GO-2026-6610,
+  GO-2026-6611, GO-2026-6613, GO-2026-6617, GO-2026-6809, GO-2026-6859. All are
+  fixed by Go 1.27.4. Binary mode shows that an affected function is linked
+  into the binary, not that the tool calls it; each advisory is described at
+  `https://pkg.go.dev/vuln/<ID>`.
+
+### Changed
+
+- `make package` runs `govulncheck ./...` first (`make vuln`) and stops on a
+  finding, so a release cannot be built past one.
+
 ### Fixed
 
 - **The Linux archives no longer carry macOS file metadata.** macOS `tar` wrote
