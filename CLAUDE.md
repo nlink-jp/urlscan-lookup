@@ -23,7 +23,7 @@ make test        # Tests with race detector + coverage
 go test ./...    # Same without Makefile
 ```
 
-Go 1.25+. **No external dependencies — standard library only.**
+Go 1.27.4+. **No external dependencies — standard library only.**
 
 ## Architecture
 

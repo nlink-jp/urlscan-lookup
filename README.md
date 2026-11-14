@@ -94,7 +94,7 @@ make test        # go test -race -cover ./...
 make build-all   # cross-compile all platforms
 ```
 
-Go 1.25+. No external dependencies — standard library only.
+Go 1.27.4+. No external dependencies — standard library only.
 
 ## Configuration
 

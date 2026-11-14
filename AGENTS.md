@@ -21,7 +21,7 @@ make build-all  # cross-compile linux/{amd64,arm64}, darwin/arm64, windows/amd64
 make verify-release  # gate: notarized, fresh, runs at this version, clean linux archives (run before upload)
 ```
 
-Go 1.25+. **No external dependencies** — standard library only. A urlscan.io
+Go 1.27.4+. **No external dependencies** — standard library only. A urlscan.io
 free-plan API key is required at runtime (`URLSCAN_API_KEY`).
 
 ## Layout
