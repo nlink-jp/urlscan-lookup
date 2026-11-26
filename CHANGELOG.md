@@ -4,6 +4,8 @@ All notable changes to urlscan-lookup are documented here.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-27
+
 ### Changed
 
 - `make vuln` — and so `make package` — scans every platform in `PLATFORMS`,
