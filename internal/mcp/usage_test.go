@@ -11,7 +11,7 @@ import (
 // against the registry rather than against a second list that would drift.
 func manualToolNames(t *testing.T) []string {
 	t.Helper()
-	b, err := json.Marshal(toolsList())
+	b, err := json.Marshal(map[string]any{"tools": toolsList()})
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)
 	}

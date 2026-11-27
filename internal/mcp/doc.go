@@ -1,5 +1,6 @@
-// Package mcp is a zero-dependency stdio JSON-RPC 2.0 MCP server exposing the
-// urlscan engine. Scans are asynchronous: scan_url submits and returns the
+// Package mcp is urlscan-lookup's stdio MCP server, speaking both eras of the
+// protocol through nlink-jp/mcp's server.ToolServer (ADR-0002), and exposing
+// the urlscan engine. Scans are asynchronous: scan_url submits and returns the
 // UUID immediately (never blocking the MCP request), and get_result polls —
 // "still processing" is a normal response, not an error. A screenshot comes
 // back as MCP image content when it fits the server's inline budget; one that

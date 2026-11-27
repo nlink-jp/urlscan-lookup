@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -70,11 +71,9 @@ func driveWith(t *testing.T, fc *fakeClient, tune func(*config.Config), requests
 	if tune != nil {
 		tune(cfg)
 	}
-	in := strings.NewReader(strings.Join(requests, "\n") + "\n")
-	var out strings.Builder
-	if err := Serve(e, cfg, "test", in, &out); err != nil {
-		t.Fatalf("Serve: %v", err)
-	}
+	out := serveOverClient(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
+		return Serve(ctx, e, cfg, "test", in, w)
+	}, strings.Join(requests, "\n")+"\n")
 	var resps []response
 	dec := json.NewDecoder(strings.NewReader(out.String()))
 	for dec.More() {
@@ -274,7 +273,7 @@ func TestGetScreenshotInlineCanBeDeclined(t *testing.T) {
 // (DisallowUnknownFields), which refuses an unknown argument that arrives
 // anyway; TestUnknownArgumentIsRefusedByName covers it.
 func TestEveryToolSchemaIsValidAndClosed(t *testing.T) {
-	b, err := json.Marshal(toolsList())
+	b, err := json.Marshal(map[string]any{"tools": toolsList()})
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)
 	}
@@ -304,24 +303,11 @@ func TestEveryToolSchemaIsValidAndClosed(t *testing.T) {
 	}
 }
 
-func TestInitializeNegotiatesProtocolVersion(t *testing.T) {
-	cases := []struct{ params, want string }{
-		{`{"protocolVersion":"2025-11-25"}`, "2025-11-25"},
-		{`{"protocolVersion":"2025-06-18"}`, "2025-06-18"},
-		{`{"protocolVersion":"2024-11-05"}`, "2024-11-05"},
-		// 2025-03-26 requires accepting JSON-RPC batches, which this server does not.
-		{`{"protocolVersion":"2025-03-26"}`, "2025-11-25"},
-		// A revision the server does not satisfy must not be echoed back.
-		{`{"protocolVersion":"2026-07-28"}`, "2025-11-25"},
-		{`{"protocolVersion":""}`, "2025-11-25"},
-		{`{}`, "2025-11-25"},
-		{`not json`, "2025-11-25"},
-		{``, "2025-11-25"},
-	}
-	for _, c := range cases {
-		res := (&server{}).initializeResult(json.RawMessage(c.params)).(map[string]any)
-		if got := res["protocolVersion"]; got != c.want {
-			t.Errorf("initialize %s: protocolVersion = %v, want %s", c.params, got, c.want)
-		}
-	}
+// ADR-030 §7: the server against the three probe clients (legacy only,
+// dual-era, modern only).
+func TestAgainstTheProbeClients(t *testing.T) {
+	e, cfg := testServer(t, &fakeClient{})
+	probeMatrix(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
+		return Serve(ctx, e, cfg, "test", in, w)
+	})
 }

@@ -21,8 +21,9 @@ import (
 //go:embed usage.md
 var usageMarkdown string
 
-// Instructions is the initialize-time hint that makes get_usage discoverable
-// and steers clients away from common errors.
+// Instructions is the hint a client receives when it opens the server (the
+// MCP `instructions` field, in initialize or server/discover) that makes
+// get_usage discoverable and steers clients away from common errors.
 const Instructions = "urlscan-lookup investigates a suspicious URL via the urlscan.io API. " +
 	"Scans are asynchronous: scan_url submits and returns a uuid immediately (default visibility PRIVATE — " +
 	"pass visibility \"public\" only to deliberately publish the scan to the world), then poll get_result " +
@@ -73,93 +74,87 @@ func decodeArgs(raw json.RawMessage, into any) error {
 	return nil
 }
 
+
 // toolsList returns the advertised tool set with JSON Schema for each input.
-func toolsList() any {
-	return map[string]any{
-		"tools": []map[string]any{
-			{
-				"name":        "get_usage",
-				"description": "Return this server's operating manual (markdown): the tools, result schema, quota notes, and error-recovery table. Call it once before first use.",
-				"inputSchema": obj(map[string]any{}),
-			},
-			{
-				"name":        "scan_url",
-				"description": "Submit a NEW active scan of a URL to urlscan.io and return its uuid immediately (the scan runs asynchronously — poll get_result with the uuid). Default visibility is PRIVATE (visible only to this account); pass visibility \"public\" ONLY to deliberately publish the scan to the world (including the attacker). Consumes the low free-plan scan quota.",
-				"inputSchema": obj(map[string]any{
-					"url":        map[string]any{"type": "string", "description": "The http(s) URL to scan."},
-					"visibility": map[string]any{"type": "string", "enum": []string{"private", "unlisted", "public"}, "description": "Scan visibility (default private)."},
-					"country":    map[string]any{"type": "string", "description": "Scanning PoP country code, e.g. jp, de (to defeat geo-fenced phishing)."},
-					"tags":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Tags to attach."},
-					"referer":    map[string]any{"type": "string", "description": "Referer header to send."},
-					"user_agent": map[string]any{"type": "string", "description": "User-Agent to send."},
-				}, "url"),
-			},
-			{
-				"name":        "get_result",
-				"description": "Fetch a scan result by uuid. While the scan is still running it returns {status:\"processing\"} — that is normal; poll again after a few seconds. Returns the normalized verdict, final URL, observed IPs/domains, and counts.",
-				"inputSchema": obj(map[string]any{
-					"uuid":    map[string]any{"type": "string", "description": "The scan uuid returned by scan_url."},
-					"refresh": map[string]any{"type": "boolean", "description": "Bypass the local cache and re-fetch."},
-				}, "uuid"),
-			},
-			{
-				"name":        "search",
-				"description": "Search the historical PUBLIC scan database (passive; never touches the target — OpSec-safe). Query uses urlscan's ElasticSearch syntax, e.g. 'domain:example.com' or 'page.ip:1.2.3.4'.",
-				"inputSchema": obj(map[string]any{
-					"query":        map[string]any{"type": "string", "description": "urlscan search query (ElasticSearch syntax)."},
-					"size":         map[string]any{"type": "integer", "description": "Number of results (default 100)."},
-					"search_after": map[string]any{"type": "string", "description": "Pagination cursor (sort value of the last row)."},
-					"refresh":      map[string]any{"type": "boolean", "description": "Bypass the local cache and re-fetch."},
-				}, "query"),
-			},
-			{
-				"name":        "get_screenshot",
-				"description": "Fetch a scan's screenshot PNG. It comes back inline as MCP image content when it fits the server's budget (4 MiB by default) so you can look at it directly. A larger one is not returned as bytes and is not written anywhere: the reply carries its size, the budget that stopped it, and the urlscan.io URL to fetch it from. Nothing is written to disk.",
-				"inputSchema": obj(map[string]any{
-					"uuid":   map[string]any{"type": "string", "description": "The scan uuid."},
-					"inline": map[string]any{"type": "boolean", "description": "Return the image inline when it fits the budget (default true). Set false if your client cannot take image content; the reply then carries the size and the URL only."},
-				}, "uuid"),
-			},
-			{
-				"name":        "get_quota",
-				"description": "Report the account's remaining urlscan API quota per action (public/private/unlisted scan, search, retrieve) across the day/hour/minute windows. Free-plan quotas are low — check before batch scanning.",
-				"inputSchema": obj(map[string]any{}),
-			},
+func toolsList() []map[string]any {
+	return []map[string]any{
+		{
+			"name":        "get_usage",
+			"description": "Return this server's operating manual (markdown): the tools, result schema, quota notes, and error-recovery table. Call it once before first use.",
+			"inputSchema": obj(map[string]any{}),
+		},
+		{
+			"name":        "scan_url",
+			"description": "Submit a NEW active scan of a URL to urlscan.io and return its uuid immediately (the scan runs asynchronously — poll get_result with the uuid). Default visibility is PRIVATE (visible only to this account); pass visibility \"public\" ONLY to deliberately publish the scan to the world (including the attacker). Consumes the low free-plan scan quota.",
+			"inputSchema": obj(map[string]any{
+				"url":        map[string]any{"type": "string", "description": "The http(s) URL to scan."},
+				"visibility": map[string]any{"type": "string", "enum": []string{"private", "unlisted", "public"}, "description": "Scan visibility (default private)."},
+				"country":    map[string]any{"type": "string", "description": "Scanning PoP country code, e.g. jp, de (to defeat geo-fenced phishing)."},
+				"tags":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Tags to attach."},
+				"referer":    map[string]any{"type": "string", "description": "Referer header to send."},
+				"user_agent": map[string]any{"type": "string", "description": "User-Agent to send."},
+			}, "url"),
+		},
+		{
+			"name":        "get_result",
+			"description": "Fetch a scan result by uuid. While the scan is still running it returns {status:\"processing\"} — that is normal; poll again after a few seconds. Returns the normalized verdict, final URL, observed IPs/domains, and counts.",
+			"inputSchema": obj(map[string]any{
+				"uuid":    map[string]any{"type": "string", "description": "The scan uuid returned by scan_url."},
+				"refresh": map[string]any{"type": "boolean", "description": "Bypass the local cache and re-fetch."},
+			}, "uuid"),
+		},
+		{
+			"name":        "search",
+			"description": "Search the historical PUBLIC scan database (passive; never touches the target — OpSec-safe). Query uses urlscan's ElasticSearch syntax, e.g. 'domain:example.com' or 'page.ip:1.2.3.4'.",
+			"inputSchema": obj(map[string]any{
+				"query":        map[string]any{"type": "string", "description": "urlscan search query (ElasticSearch syntax)."},
+				"size":         map[string]any{"type": "integer", "description": "Number of results (default 100)."},
+				"search_after": map[string]any{"type": "string", "description": "Pagination cursor (sort value of the last row)."},
+				"refresh":      map[string]any{"type": "boolean", "description": "Bypass the local cache and re-fetch."},
+			}, "query"),
+		},
+		{
+			"name":        "get_screenshot",
+			"description": "Fetch a scan's screenshot PNG. It comes back inline as MCP image content when it fits the server's budget (4 MiB by default) so you can look at it directly. A larger one is not returned as bytes and is not written anywhere: the reply carries its size, the budget that stopped it, and the urlscan.io URL to fetch it from. Nothing is written to disk.",
+			"inputSchema": obj(map[string]any{
+				"uuid":   map[string]any{"type": "string", "description": "The scan uuid."},
+				"inline": map[string]any{"type": "boolean", "description": "Return the image inline when it fits the budget (default true). Set false if your client cannot take image content; the reply then carries the size and the URL only."},
+			}, "uuid"),
+		},
+		{
+			"name":        "get_quota",
+			"description": "Report the account's remaining urlscan API quota per action (public/private/unlisted scan, search, retrieve) across the day/hour/minute windows. Free-plan quotas are low — check before batch scanning.",
+			"inputSchema": obj(map[string]any{}),
 		},
 	}
 }
 
-func (s *server) toolsCall(params json.RawMessage) (toolResult, *rpcError) {
-	var p struct {
-		Name      string          `json:"name"`
-		Arguments json.RawMessage `json:"arguments"`
-	}
-	if err := json.Unmarshal(params, &p); err != nil {
-		return toolResult{}, &rpcError{Code: -32602, Message: "invalid params: " + err.Error()}
-	}
-	ctx := context.Background()
-	switch p.Name {
+// toolsCall dispatches one call by tool name and builds its result.
+func (s *server) toolsCall(ctx context.Context, name string, args json.RawMessage) toolResult {
+	ctx = context.Background()
+	switch name {
 	case "get_usage":
 		// No arguments — which still means "none", not "any".
-		if err := decodeArgs(p.Arguments, &struct{}{}); err != nil {
-			return errorResult("invalid_input", err.Error()), nil
+		if err := decodeArgs(args, &struct{}{}); err != nil {
+			return errorResult("invalid_input", err.Error())
 		}
-		return textResult(false, usageMarkdown), nil
+		return textResult(false, usageMarkdown)
 	case "scan_url":
-		return s.toolScanURL(ctx, p.Arguments), nil
+		return s.toolScanURL(ctx, args)
 	case "get_result":
-		return s.toolGetResult(ctx, p.Arguments), nil
+		return s.toolGetResult(ctx, args)
 	case "search":
-		return s.toolSearch(ctx, p.Arguments), nil
+		return s.toolSearch(ctx, args)
 	case "get_screenshot":
-		return s.toolGetScreenshot(ctx, p.Arguments), nil
+		return s.toolGetScreenshot(ctx, args)
 	case "get_quota":
-		if err := decodeArgs(p.Arguments, &struct{}{}); err != nil {
-			return errorResult("invalid_input", err.Error()), nil
+		if err := decodeArgs(args, &struct{}{}); err != nil {
+			return errorResult("invalid_input", err.Error())
 		}
-		return s.toolGetQuota(ctx), nil
+		return s.toolGetQuota(ctx)
 	default:
-		return toolResult{}, &rpcError{Code: -32602, Message: "unknown tool: " + p.Name}
+		// Not reached: the protocol layer refuses a tool it did not register.
+		return textResult(true, "unknown tool: "+name)
 	}
 }
 
