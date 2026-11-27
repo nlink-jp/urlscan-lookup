@@ -64,6 +64,10 @@ malicious 判定時に `scan` が exit 1（SOC スクリプト連携用）。
 
 ### MCP ツール
 
+MCP サーバーは、プロトコルの新旧両方の時代を話します。2026-07-28 版（`server/discover` で探るクライアント）と、
+それより前の `initialize` の握手（2025-11-25・2025-06-18・2024-11-05）です。パイプで流し込んだ要求には、
+入力の終わりで終了する前にすべて答えます。
+
 `scan_url` / `get_result` / `search` / `get_screenshot` / `get_quota` /
 `get_usage`。スキャンは非同期で、`scan_url` は UUID を即返し、`get_result` で
 ポーリングします（`processing` は正常状態）。`get_screenshot` は上限内（既定
@@ -90,7 +94,8 @@ make test        # go test -race -cover ./...
 make build-all   # 全プラットフォームをクロスコンパイル
 ```
 
-Go 1.27.4+。外部依存なし — 標準ライブラリのみ。
+Go 1.27.4+。サードパーティ製の依存なし — 標準ライブラリと、MCP のプロトコルを担う組織の共通モジュール
+[nlink-jp/mcp](https://github.com/nlink-jp/mcp) だけを使います。
 
 ## 設定
 

@@ -22,7 +22,9 @@ make vuln            # govulncheck over the build; `make package` runs it first 
 make verify-release  # gate: notarized, fresh, runs at this version, clean linux archives (run before upload)
 ```
 
-Go 1.27.4+. **No external dependencies** — standard library only. A urlscan.io
+Go 1.27.4+. **No third-party dependencies** — the standard library, plus nlink-jp
+modules written on the same rule (`github.com/nlink-jp/mcp` for the MCP
+protocol, organization ADR-030; ADR-0002). A urlscan.io
 free-plan API key is required at runtime (`URLSCAN_API_KEY`).
 
 ## Layout
@@ -39,7 +41,7 @@ internal/config/        Sectioned-TOML subset + env/flag resolution.
 internal/engine/        Ties validate+client+cache. Submit and Poll are separate
                         (async job style); Result/Search/Quota are cache-aware.
 internal/app/           CLI: dispatch, scan/search/result/screenshot/quota/cache/mcp, output.
-internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
+internal/mcp/           MCP tools on nlink-jp/mcp's server.ToolServer (both eras; ADR-0002)
   usage.md              Embedded get_usage manual.
 ```
 
@@ -80,6 +82,15 @@ internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
 - **No LLM judgment.** Verdicts are urlscan's; analysis is left to the caller.
 
 ## Gotchas
+
+- **The MCP protocol is nlink-jp/mcp's** (ADR-0002, organization ADR-030 §6).
+  `internal/mcp` never handles `initialize` or `server/discover` itself: `Serve`
+  registers `toolsList()` on a `server.ToolServer` and each handler calls
+  `toolsCall`. Tests replay their requests through the module's `client`
+  (`clienttest_test.go`) and run its three probe clients; do not write the
+  handshake by hand in a test. Before initialize, `tools/*` is -32602 — the
+  module's rule, not a defect. Argument names are matched exactly
+  (`decodeArgs`, `argNames`).
 
 - The auth header name is **`API-Key`** exactly — urlscan rejects `x-api-key`.
 - `result`/`screenshot` return **HTTP 404 while a scan is still running**

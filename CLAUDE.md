@@ -23,7 +23,9 @@ make test        # Tests with race detector + coverage
 go test ./...    # Same without Makefile
 ```
 
-Go 1.27.4+. **No external dependencies — standard library only.**
+Go 1.27.4+. **No third-party dependencies** — the standard library, plus nlink-jp
+modules written on the same rule (`github.com/nlink-jp/mcp` for the MCP
+protocol, organization ADR-030; ADR-0002).
 
 ## Architecture
 
@@ -35,13 +37,13 @@ internal/cache/         Per-key TTL cache for result/search (scan never cached),
 internal/config/        Sectioned-TOML subset + URLSCAN_LOOKUP_* / URLSCAN_API_KEY env/flag resolution
 internal/engine/        validate → cache → client; Submit/Poll split for async; shared by CLI + MCP
 internal/app/           Dispatch + scan/search/result/screenshot/quota/cache/mcp; --json etc.
-internal/mcp/           Zero-dep stdio JSON-RPC 2.0 server; async job style
+internal/mcp/           MCP tools on nlink-jp/mcp's server.ToolServer (both eras; ADR-0002); async job style
   usage.md              Embedded get_usage manual
 ```
 
 Core logic takes injected dependencies (the HTTP client is the `urlscan.Doer`
 interface; the engine depends on the `engine.Client` interface), mocked in
-tests. **No external dependencies — standard library only.**
+tests. See above for the dependency rule.
 
 ## Key conventions
 

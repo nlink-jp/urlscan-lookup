@@ -67,6 +67,11 @@ verdict is malicious (for SOC scripting).
 
 ### MCP tools
 
+The MCP server speaks both eras of the protocol: the 2026-07-28 revision
+(clients that probe with `server/discover`) and the earlier `initialize`
+handshake (2025-11-25, 2025-06-18, 2024-11-05). Requests piped in are all
+answered before it exits at end of input.
+
 `scan_url`, `get_result`, `search`, `get_screenshot`, `get_quota`,
 `get_usage`. Scans are asynchronous: `scan_url` returns a UUID immediately and
 `get_result` polls (a `processing` status is normal). `get_screenshot` returns
@@ -94,7 +99,9 @@ make test        # go test -race -cover ./...
 make build-all   # cross-compile all platforms
 ```
 
-Go 1.27.4+. No external dependencies — standard library only.
+Go 1.27.4+. No third-party dependencies — the standard library, plus the
+organization's module [nlink-jp/mcp](https://github.com/nlink-jp/mcp) for the MCP
+protocol.
 
 ## Configuration
 
