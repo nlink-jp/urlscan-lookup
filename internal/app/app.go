@@ -123,8 +123,8 @@ var (
 	mcpStdout     io.Writer = os.Stdout
 )
 
-// cmdMCP runs the stdio MCP server until stdin closes (MCP has no protocol
-// cancel; a closing stdin is the shutdown signal).
+// cmdMCP runs the stdio MCP server until stdin closes, answering every
+// request that arrived, or until SIGINT or SIGTERM.
 func cmdMCP(args []string, version string) int {
 	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
