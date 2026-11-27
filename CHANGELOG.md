@@ -4,6 +4,8 @@ All notable changes to urlscan-lookup are documented here.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-28
+
 ### Added
 
 - **The MCP server speaks both eras of the protocol** (ADR-0002): the
