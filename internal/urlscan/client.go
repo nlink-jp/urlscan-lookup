@@ -54,6 +54,9 @@ type RateLimit struct {
 }
 
 // Doer executes HTTP requests. *http.Client satisfies it; tests inject fakes.
+// maxResponseBytes is the largest response body read; a larger one fails.
+const maxResponseBytes = 32 << 20
+
 type Doer interface {
 	Do(*http.Request) (*http.Response, error)
 }
@@ -204,11 +207,20 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		}
 		rl := parseRateLimit(resp.Header)
 		lastRL = rl
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+		body, rerr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 		_ = resp.Body.Close()
 
 		switch {
 		case resp.StatusCode == http.StatusOK:
+			// A body cut short (a dropped connection, a cancelled call) or one
+			// past the ceiling is a failure, not a success holding part of the
+			// data: a truncated screenshot would come back as an intact PNG.
+			if rerr != nil {
+				return nil, rl, fmt.Errorf("urlscan: read response: %w", rerr)
+			}
+			if len(body) > maxResponseBytes {
+				return nil, rl, fmt.Errorf("urlscan: response larger than %d MiB", maxResponseBytes>>20)
+			}
 			return body, rl, nil
 		case resp.StatusCode == http.StatusNotFound:
 			return nil, rl, ErrNotReady

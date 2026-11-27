@@ -195,3 +195,36 @@ func TestBrandNamesPolymorphic(t *testing.T) {
 		t.Fatalf("nil brands: %v", got)
 	}
 }
+
+// failingBody yields some bytes and then the error a dropped connection gives.
+type failingBody struct{ sent bool }
+
+func (f *failingBody) Read(p []byte) (int, error) {
+	if !f.sent {
+		f.sent = true
+		return copy(p, "\x89PNG\r\n"), nil
+	}
+	return 0, io.ErrUnexpectedEOF
+}
+
+func (f *failingBody) Close() error { return nil }
+
+// A 200 whose body is cut short, or runs past the ceiling, is a failure: it
+// used to come back as a success holding the part that arrived.
+func TestATruncatedOrOversizedBodyIsAFailure(t *testing.T) {
+	cut := &http.Response{StatusCode: 200, Body: &failingBody{}, Header: http.Header{}}
+	c := newTestClient(&fakeDoer{responses: []*http.Response{cut}})
+	if png, err := c.Screenshot(context.Background(), "01234567-89ab-cdef-0123-456789abcdef"); err == nil {
+		t.Fatalf("a cut-short body succeeded with %d bytes", len(png))
+	}
+	big := resp(200, strings.Repeat("x", maxResponseBytes+1), nil)
+	c = newTestClient(&fakeDoer{responses: []*http.Response{big}})
+	if png, err := c.Screenshot(context.Background(), "01234567-89ab-cdef-0123-456789abcdef"); err == nil {
+		t.Fatalf("an oversized body succeeded with %d bytes", len(png))
+	}
+	exact := resp(200, strings.Repeat("x", maxResponseBytes), nil)
+	c = newTestClient(&fakeDoer{responses: []*http.Response{exact}})
+	if png, err := c.Screenshot(context.Background(), "01234567-89ab-cdef-0123-456789abcdef"); err != nil || len(png) != maxResponseBytes {
+		t.Fatalf("a body at the ceiling: %d bytes, %v", len(png), err)
+	}
+}
