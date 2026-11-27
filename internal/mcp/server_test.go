@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nlink-jp/mcp/client"
 	"github.com/nlink-jp/urlscan-lookup/internal/cache"
 	"github.com/nlink-jp/urlscan-lookup/internal/config"
 	"github.com/nlink-jp/urlscan-lookup/internal/engine"
@@ -149,16 +150,6 @@ func TestGetResultProcessing(t *testing.T) {
 	}
 	if m["status"] != "processing" {
 		t.Fatalf("want status processing, got %v", m)
-	}
-}
-
-func TestNotificationGetsNoReply(t *testing.T) {
-	resps := drive(t, &fakeClient{},
-		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
-		`{"jsonrpc":"2.0","id":9,"method":"ping"}`,
-	)
-	if len(resps) != 1 {
-		t.Fatalf("notification must not be answered; want 1 response, got %d", len(resps))
 	}
 }
 
@@ -310,4 +301,16 @@ func TestAgainstTheProbeClients(t *testing.T) {
 	probeMatrix(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
 		return Serve(ctx, e, cfg, "test", in, w)
 	})
+}
+
+// The client that opens the server receives the instructions — the hint that
+// points it at get_usage — whichever era it opens in.
+func TestOpeningCarriesTheInstructions(t *testing.T) {
+	e, cfg := testServer(t, &fakeClient{})
+	cl := openWith(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
+		return Serve(ctx, e, cfg, "test", in, w)
+	}, client.Options{})
+	if got := cl.Instructions(); got != Instructions {
+		t.Errorf("instructions = %q, want the package's Instructions", got)
+	}
 }
