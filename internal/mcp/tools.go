@@ -204,7 +204,6 @@ func toolsList() []map[string]any {
 
 // toolsCall dispatches one call by tool name and builds its result.
 func (s *server) toolsCall(ctx context.Context, name string, args json.RawMessage) toolResult {
-	ctx = context.Background()
 	switch name {
 	case "get_usage":
 		// No arguments — which still means "none", not "any".
