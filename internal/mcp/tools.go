@@ -312,7 +312,9 @@ func (s *server) toolSearch(ctx context.Context, args json.RawMessage) toolResul
 	return jsonResult(res)
 }
 
-// inlineImageBudget caps the PNG returned inline as MCP image content. Base64
+// toolGetScreenshot returns a scan's screenshot PNG as MCP image content when
+// it fits the inline budget (config.DefaultScreenshotMaxBytes unless
+// configured); a larger one is reported with its size and its urlscan.io URL.
 func (s *server) toolGetScreenshot(ctx context.Context, args json.RawMessage) toolResult {
 	var a struct {
 		UUID   string `json:"uuid"`
