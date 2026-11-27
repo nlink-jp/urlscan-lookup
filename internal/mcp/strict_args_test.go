@@ -81,7 +81,6 @@ func TestMalformedArgumentsAreRefused(t *testing.T) {
 	}{
 		{"number for string", "scan_url", `{"url":1}`},
 		{"string for array", "scan_url", `{"url":"https://example.com","tags":"phish"}`},
-		{"array for object", "scan_url", `["https://example.com"]`},
 		{"number for string", "get_result", `{"uuid":1}`},
 		{"string for integer", "search", `{"query":"domain:example.com","size":"all"}`},
 	}
@@ -128,5 +127,25 @@ func TestGetScreenshotRefusesAnUnknownArgument(t *testing.T) {
 	_, msg, isErr := errText(t, drive(t, fc, req)[0])
 	if !isErr || !strings.Contains(msg, "unknown field") || !strings.Contains(msg, "workspace_root") {
 		t.Fatalf("an unknown argument must be refused by name: isError=%v msg=%q", isErr, msg)
+	}
+}
+
+// The module answers arguments that are not an object with -32602; they no
+// longer reach the tool.
+func TestNonObjectArgumentsAreAProtocolError(t *testing.T) {
+	resps := drive(t, &fakeClient{}, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"scan_url","arguments":["https://example.com"]}}`)
+	if resps[0].Error == nil || resps[0].Error.Code != -32602 {
+		t.Errorf("array arguments: %+v, want -32602", resps[0])
+	}
+}
+
+// encoding/json matches names case-insensitively; the schema does not. An
+// argument spelt in another case is refused by name.
+func TestAnArgumentInAnotherCaseIsRefused(t *testing.T) {
+	fc := &fakeClient{submit: &urlscan.SubmitResponse{UUID: "u1", Visibility: "private"}}
+	req := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"scan_url","arguments":{"URL":"https://example.com"}}}`
+	_, msg, isErr := errText(t, drive(t, fc, req)[0])
+	if !isErr || !strings.Contains(msg, `unknown field "URL"`) {
+		t.Errorf("URL was accepted: %s", msg)
 	}
 }
