@@ -45,7 +45,7 @@ All notable changes to urlscan-lookup are documented here.
 - SIGINT or SIGTERM ended the MCP server by killing the process; a signal now ends it through its context, so its cleanup runs.
 - A cancelled call kept its urlscan.io request running: the tools ran on a fixed `context.Background()`. They now run on the call's context.
 - `cache clear` left behind the temp file a write leaves when the process ends part-way (a SIGTERM past the shutdown grace, a crash); it now removes it too.
-- A 200 whose body broke off returned what had arrived as a success — a truncated screenshot came back inline as an intact PNG — and a body past 32 MiB was cut silently; both are now errors.
+- A 200 whose body broke off returned what had arrived as a success — a truncated screenshot came back inline as an intact PNG — and a body past 32 MiB was cut silently. A body cut short is now an error. The read limit is 64 MiB, the ceiling of `screenshot_max_bytes`, so every budget is reachable; a screenshot past it is reported with its `screenshot_url`, and any other answer past it is the new `too_large` error.
 
 ## [0.4.3] - 2026-11-27
 

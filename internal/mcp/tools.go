@@ -334,6 +334,18 @@ func (s *server) toolGetScreenshot(ctx context.Context, args json.RawMessage) to
 	if errors.Is(err, urlscan.ErrNotReady) {
 		return errorResult("not_ready", "screenshot not available (scan still processing or has none)")
 	}
+	if errors.Is(err, urlscan.ErrTooLarge) {
+		// Past the most this server reads, which is past every inline budget:
+		// reported, not delivered, like any screenshot above the budget. Its
+		// exact size is not known, so bytes is absent.
+		return jsonResult(map[string]any{
+			"uuid":           clean,
+			"inline":         false,
+			"screenshot_url": screenshotURL(s.cfg.BaseURL, clean),
+			"note": fmt.Sprintf("screenshot is larger than %d MiB, the most this server reads; "+
+				"fetch it from screenshot_url", urlscan.MaxResponseBytes>>20),
+		})
+	}
 	if err != nil {
 		return mapError(err)
 	}
@@ -397,6 +409,8 @@ func mapError(err error) toolResult {
 		return errorResult("rate_limited", err.Error())
 	case errors.Is(err, engine.ErrPollTimeout):
 		return errorResult("timeout", err.Error())
+	case errors.Is(err, urlscan.ErrTooLarge):
+		return errorResult("too_large", err.Error())
 	default:
 		return errorResult("network_error", err.Error())
 	}

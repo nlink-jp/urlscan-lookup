@@ -53,10 +53,15 @@ type RateLimit struct {
 	Reset     string // X-Rate-Limit-Reset (ISO-8601), or Retry-After seconds on 429
 }
 
-// Doer executes HTTP requests. *http.Client satisfies it; tests inject fakes.
-// maxResponseBytes is the largest response body read; a larger one fails.
-const maxResponseBytes = 32 << 20
+// MaxResponseBytes is the largest response body read; a larger one fails
+// with ErrTooLarge. It is the ceiling config allows for screenshot_max_bytes,
+// so every inline budget a screenshot can be held to is reachable.
+const MaxResponseBytes = 64 << 20
 
+// ErrTooLarge is a response body past MaxResponseBytes.
+var ErrTooLarge = fmt.Errorf("urlscan: response larger than %d MiB, the most this client reads", MaxResponseBytes>>20)
+
+// Doer executes HTTP requests. *http.Client satisfies it; tests inject fakes.
 type Doer interface {
 	Do(*http.Request) (*http.Response, error)
 }
@@ -207,7 +212,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		}
 		rl := parseRateLimit(resp.Header)
 		lastRL = rl
-		body, rerr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+		body, rerr := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBytes+1))
 		_ = resp.Body.Close()
 
 		switch {
@@ -218,8 +223,8 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 			if rerr != nil {
 				return nil, rl, fmt.Errorf("urlscan: read response: %w", rerr)
 			}
-			if len(body) > maxResponseBytes {
-				return nil, rl, fmt.Errorf("urlscan: response larger than %d MiB", maxResponseBytes>>20)
+			if len(body) > MaxResponseBytes {
+				return nil, rl, ErrTooLarge
 			}
 			return body, rl, nil
 		case resp.StatusCode == http.StatusNotFound:

@@ -63,7 +63,8 @@ Above the budget the screenshot is reported, not delivered: the reply carries
 `bytes`, `inline: false`, a `note` naming the budget that stopped it, and
 `screenshot_url` — urlscan.io's own address for the PNG — which you or your
 runtime can fetch. It is not truncated, because half a PNG is not a smaller
-picture. Base64 inflates by a third and an inline image is replayed with the
+picture. A screenshot larger than 64 MiB, the most this server reads, comes
+back the same way without `bytes`: its exact size is not known. Base64 inflates by a third and an inline image is replayed with the
 conversation every round, which is what the budget is for.
 
 Arguments: `uuid` (required), `inline` (optional, default true — set false if
@@ -114,3 +115,4 @@ Tool errors are structured JSON: `{"code": "...", "message": "..."}`.
 | `gone` | The scan result was deleted (HTTP 410). | Nothing to fetch; submit a fresh scan if needed. |
 | `timeout` | A polled scan did not finish within the budget. | The scan may still complete; fetch it later with get_result by uuid. |
 | `network_error` | urlscan was unreachable or answered abnormally. | Retry later; avoid rapid retries — the cache exists for a reason. |
+| `too_large` | A urlscan.io answer was larger than 64 MiB, the most this server reads. | Not transient: narrow the request (a search with a smaller `size`). A screenshot this large is not an error — it comes back as `screenshot_url`. |

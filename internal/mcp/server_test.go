@@ -314,3 +314,31 @@ func TestOpeningCarriesTheInstructions(t *testing.T) {
 		t.Errorf("instructions = %q, want the package's Instructions", got)
 	}
 }
+
+// tooLargeEngine's screenshot is past the most the client reads.
+type tooLargeClient struct{ fakeClient }
+
+func (tooLargeClient) Screenshot(context.Context, string) ([]byte, error) {
+	return nil, urlscan.ErrTooLarge
+}
+
+// A screenshot past the read limit is reported with its URL, as any
+// screenshot above the inline budget is, not as a network error.
+func TestAScreenshotPastTheReadLimitIsReported(t *testing.T) {
+	e, cfg := testServer(t, nil)
+	e.Client = &tooLargeClient{}
+	cl := openWith(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
+		return Serve(ctx, e, cfg, "test", in, w)
+	}, client.Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := cl.CallTool(ctx, "get_screenshot", map[string]any{"uuid": "01234567-89ab-cdef-0123-456789abcdef"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var block struct{ Text string }
+	_ = json.Unmarshal(res.Content[0], &block)
+	if res.IsError || !strings.Contains(block.Text, `"screenshot_url"`) || !strings.Contains(block.Text, `"inline": false`) || strings.Contains(block.Text, `"bytes"`) {
+		t.Fatalf("isError=%v %s", res.IsError, block.Text)
+	}
+}

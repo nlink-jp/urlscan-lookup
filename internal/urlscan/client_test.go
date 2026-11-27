@@ -217,14 +217,14 @@ func TestATruncatedOrOversizedBodyIsAFailure(t *testing.T) {
 	if png, err := c.Screenshot(context.Background(), "01234567-89ab-cdef-0123-456789abcdef"); err == nil {
 		t.Fatalf("a cut-short body succeeded with %d bytes", len(png))
 	}
-	big := resp(200, strings.Repeat("x", maxResponseBytes+1), nil)
+	big := resp(200, strings.Repeat("x", MaxResponseBytes+1), nil)
 	c = newTestClient(&fakeDoer{responses: []*http.Response{big}})
-	if png, err := c.Screenshot(context.Background(), "01234567-89ab-cdef-0123-456789abcdef"); err == nil {
-		t.Fatalf("an oversized body succeeded with %d bytes", len(png))
+	if png, err := c.Screenshot(context.Background(), "01234567-89ab-cdef-0123-456789abcdef"); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("an oversized body: %d bytes, %v; want ErrTooLarge", len(png), err)
 	}
-	exact := resp(200, strings.Repeat("x", maxResponseBytes), nil)
+	exact := resp(200, strings.Repeat("x", MaxResponseBytes), nil)
 	c = newTestClient(&fakeDoer{responses: []*http.Response{exact}})
-	if png, err := c.Screenshot(context.Background(), "01234567-89ab-cdef-0123-456789abcdef"); err != nil || len(png) != maxResponseBytes {
+	if png, err := c.Screenshot(context.Background(), "01234567-89ab-cdef-0123-456789abcdef"); err != nil || len(png) != MaxResponseBytes {
 		t.Fatalf("a body at the ceiling: %d bytes, %v", len(png), err)
 	}
 }
