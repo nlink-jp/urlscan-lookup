@@ -30,7 +30,9 @@ All notable changes to urlscan-lookup are documented here.
     A cancelled call stops its urlscan.io request (it ran on a fixed
     `context.Background()`); a scan whose submission already reached
     urlscan.io stays submitted. The cache is written whole to a temporary file
-    and renamed, so nothing partial is left.
+    and renamed, so no entry is ever partial; a temp file left by a process
+    ended part-way (a SIGTERM past the shutdown grace) is removed by `cache
+    clear`.
 
   Requests piped in are still all answered before the server exits at end of
   input.
@@ -42,6 +44,8 @@ All notable changes to urlscan-lookup are documented here.
 - An argument spelt in another case (`{"URL": ...}`) was accepted as the declared one; it is now refused by name.
 - SIGINT or SIGTERM ended the MCP server by killing the process; a signal now ends it through its context, so its cleanup runs.
 - A cancelled call kept its urlscan.io request running: the tools ran on a fixed `context.Background()`. They now run on the call's context.
+- `cache clear` left behind the temp file a write leaves when the process ends part-way (a SIGTERM past the shutdown grace, a crash); it now removes it too.
+- A 200 whose body broke off returned what had arrived as a success — a truncated screenshot came back inline as an intact PNG — and a body past 32 MiB was cut silently; both are now errors.
 
 ## [0.4.3] - 2026-11-27
 
@@ -220,7 +224,6 @@ All notable changes to urlscan-lookup are documented here.
   root it can read back: every result is returned as a path under that root, so
   a workspace the caller cannot open leaves it holding a path to nothing. Text
   only — the behaviour is unchanged.
-
 
 ## [0.1.0] - 2026-07-17
 

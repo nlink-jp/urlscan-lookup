@@ -31,7 +31,7 @@ Follow the common policy (nlink-jp/mcp's `docs/en/server-migration.md`, v0.3.0) 
    are -32602; `arguments` that is not an object is -32602; `"id":null` and a request without `"jsonrpc"` are -32600;
    framing changes from `json.Decoder` to one message per line (16 MiB); parse errors and batches no longer end the
    server; a panic is answered -32603; up to 256 calls wait, more get -32603 "server busy".
-5. **Cancellation (policy §5)**: `notifications/cancelled` now cancels the call's ctx. A cancelled call stops its urlscan.io request (it ran on a fixed `context.Background()`); a scan whose submission already reached urlscan.io stays submitted. The cache is written whole to a temporary file and renamed, so nothing partial is left.
+5. **Cancellation (policy §5)**: `notifications/cancelled` now cancels the call's ctx. A cancelled call stops its urlscan.io request (it ran on a fixed `context.Background()`); a scan whose submission already reached urlscan.io stays submitted. The cache is written whole to a temporary file and renamed, so no entry is ever partial; a temp file left by a process ended part-way (a SIGTERM past the shutdown grace) is removed by `cache clear`.
 6. **Signals (policy §2)**: the `mcp` subcommand passes `Serve` a ctx cancelled by SIGINT and SIGTERM.
 7. **Dependency and version**: `github.com/nlink-jp/mcp` is added; minor (v0.5.0).
 
@@ -40,6 +40,8 @@ Follow the common policy (nlink-jp/mcp's `docs/en/server-migration.md`, v0.3.0) 
 - An argument spelt in another case (`{"URL": ...}`) was accepted as the declared one; it is now refused by name.
 - SIGINT or SIGTERM ended the MCP server by killing the process; a signal now ends it through its context, so its cleanup runs.
 - A cancelled call kept its urlscan.io request running: the tools ran on a fixed `context.Background()`. They now run on the call's context.
+- `cache clear` left behind the temp file a write leaves when the process ends part-way (a SIGTERM past the shutdown grace, a crash); it now removes it too.
+- A 200 whose body broke off returned what had arrived as a success — a truncated screenshot came back inline as an intact PNG — and a body past 32 MiB was cut silently; both are now errors.
 
 ## Consequences
 
